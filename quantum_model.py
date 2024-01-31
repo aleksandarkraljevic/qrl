@@ -3,16 +3,17 @@ importlib.reload(pkg_resources)
 
 from helper import *
 
-import cirq
+import gym, cirq, sympy
 import time
 import numpy as np
-from collections import deque
+from collections import deque, defaultdict
+from functools import reduce
 tf.get_logger().setLevel('ERROR')
 
-class QDQN():
-    def __init__(self, savename, model, model_target, n_layers, n_holes, qubits, memory_size, learning_rates, gamma, n_episodes, steps_per_train, soft_weight_update, steps_per_target_update, tau, epsilon_start, epsilon_min, decay_epsilon, temperature, batch_size, min_size_buffer, max_size_buffer, exploration_strategy):
+class QRL():
+    def __init__(self, savename, model, learning_rates, gamma, n_episodes, batch_size, state_bounds, n_qubits, n_layers, n_actions, env_name):
         '''
-        Initializes the QDQN parameters.
+        Initializes the QRL parameters.
 
         Parameters
         ----------
@@ -63,235 +64,128 @@ class QDQN():
         '''
         self.savename = savename
         self.model = model
-        self.model_target = model_target
-        self.n_layers = n_layers
-        self.n_holes = n_holes
-        self.qubits = qubits
-        self.memory_size = memory_size
         self.gamma = gamma
         self.n_episodes = n_episodes
-        self.steps_per_train = steps_per_train
-        self.soft_weight_update = soft_weight_update
-        self.steps_per_target_update = steps_per_target_update
-        self.tau = tau
-        self.epsilon_start = epsilon_start
-        self.epsilon_min = epsilon_min
-        self.decay_epsilon = decay_epsilon
-        self.temperature = temperature
         self.batch_size = batch_size
-        self.min_size_buffer = min_size_buffer
-        self.max_size_buffer = max_size_buffer
-        self.exploration_strategy = exploration_strategy
+        self.state_bounds = state_bounds
+        self.n_qubits = n_qubits
+        self.n_layers = n_layers
+        self.n_actions = n_actions
+        self.env_name = env_name
         self.optimizer_in = tf.keras.optimizers.Adam(learning_rate=learning_rates[0], amsgrad=True)
         self.optimizer_var = tf.keras.optimizers.Adam(learning_rate=learning_rates[1], amsgrad=True)
         self.optimizer_out = tf.keras.optimizers.Adam(learning_rate=learning_rates[2], amsgrad=True)
         # Indexes of the weights for each of the parts of the circuit
         self.w_in, self.w_var, self.w_out = 1, 0, 2
 
-    def main(self):
-        '''
-        Handles the main bulk of the QDQN, making use of all the other functions in this class.
-        '''
-        env = FoxInAHole(self.n_holes)
-        replay_memory = deque(maxlen=self.max_size_buffer)
+    def gather_episodes(self):
+        """Interact with environment in batched fashion."""
 
-        episode_reward_history = []
-        episode_length_history = []
-        step_count = 0
+        trajectories = [defaultdict(list) for _ in range(self.n_episodes)]
+        envs = [gym.make(self.env_name) for _ in range(self.n_episodes)]
 
-        for episode in range(self.n_episodes):
-            episode_reward = 0
-            state = deque([0] * self.memory_size, maxlen=self.memory_size)
-            done = env.reset()
-            episode_length = 0
+        done = [False for _ in range(self.n_episodes)]
+        states = [e.reset() for e in envs]
 
-            # annealing, done before the while loop because the first episode equals 0 so it returns the original epsilon back
-            if self.exploration_strategy == 'egreedy':
-                epsilon = exponential_anneal(episode, self.epsilon_start, self.epsilon_min, self.decay_epsilon)
+        while not all(done):
+            unfinished_ids = [i for i in range(self.n_episodes) if not done[i]]
+            normalized_states = [s / self.state_bounds for i, s in enumerate(states) if not done[i]]
 
-            while True:
-                episode_length += 1
+            for i, state in zip(unfinished_ids, normalized_states):
+                trajectories[i]['states'].append(state)
 
-                state_tensor = tf.convert_to_tensor([np.array(state)])
-                q_vals = self.model([state_tensor])
-                possible_actions = np.arange(self.n_holes)
+            # Compute policy for all unfinished envs in parallel
+            states = tf.convert_to_tensor(normalized_states)
+            action_probs = self.model([states])
 
-                # Sample action
-                if self.exploration_strategy == 'egreedy':
-                    coin = np.random.random()
-                    if coin > epsilon:
-                        action = int(tf.argmax(q_vals[0]).numpy())
-                    else:
-                        action = np.random.randint(self.n_holes)
-                elif self.exploration_strategy == 'boltzmann':
-                    probabilities = boltzmann_exploration(np.array(q_vals), self.temperature)
-                    action = np.random.choice(possible_actions, p=probabilities)
+            # Store action and transition all environments to the next state
+            states = [None for i in range(self.n_episodes)]
+            for i, policy in zip(unfinished_ids, action_probs.numpy()):
+                action = np.random.choice(self.n_actions, p=policy)
+                states[i], reward, done[i], _ = envs[i].step(action)
+                trajectories[i]['actions'].append(action)
+                trajectories[i]['rewards'].append(reward)
 
-                # Interact with env
-                interaction = self.interact_env(state, action, env)
+        return trajectories
 
-                # Store interaction in the replay memory
-                replay_memory.append(interaction)
+    def compute_returns(self, rewards_history):
+        """Compute discounted returns with discount factor `gamma`."""
+        returns = []
+        discounted_sum = 0
+        for r in rewards_history[::-1]:
+            discounted_sum = r + self.gamma * discounted_sum
+            returns.insert(0, discounted_sum)
 
-                state = interaction['next_state']
-                episode_reward += interaction['reward']
-                step_count += 1
+        # Normalize them for faster and more stable learning
+        returns = np.array(returns)
+        returns = (returns - np.mean(returns)) / (np.std(returns) + 1e-8)
+        returns = returns.tolist()
 
-                # Update model
-                if step_count % self.steps_per_train == 0 and len(replay_memory) >= self.min_size_buffer:
-                    # Sample a batch of interactions and update Q_function
-                    training_batch = np.random.choice(replay_memory, size=self.batch_size)
-                    self.Q_learning_update(np.asarray([x['state'] for x in training_batch]),
-                                      np.asarray([x['action'] for x in training_batch]),
-                                      np.asarray([x['reward'] for x in training_batch], dtype=np.float32),
-                                      np.asarray([x['next_state'] for x in training_batch]),
-                                      np.asarray([x['done'] for x in training_batch], dtype=np.float32))
-
-                # Update target model
-                if self.soft_weight_update:
-                    self.update_model()
-                elif step_count % self.steps_per_target_update == 0:
-                    self.update_model()
-
-                # Check if the episode is finished
-                if interaction['done']:
-                    break
-
-                env.step()
-
-            episode_length_history.append(episode_length)
-            episode_reward_history.append(episode_reward)
-
-            if episode % 100 == 0:
-                print('Training progress: ' + str(episode) + '/' + str(self.n_episodes))
-
-        if self.savename != False:
-            self.save_data(episode_reward_history, episode_length_history)
-
-    def update_model(self):
-        '''
-        Copies weights from the base network to the network via a hard-update or soft-update rule.
-        '''
-        if self.soft_weight_update:
-            new_weights = []
-            for TN_layer, BM_layer in zip(self.model_target.get_weights(), self.model.get_weights()):
-                new_weights.append((1-self.tau) * TN_layer + self.tau * BM_layer)
-            self.model_target.set_weights(new_weights)
-        else:
-            self.model_target.set_weights(self.model.get_weights())
-
-    def save_data(self, rewards, episode_lengths):
-        '''
-        Saves the model after its training, as well as important results and properties.
-
-        Parameters
-        ----------
-        rewards (list):
-            A list of all the rewards that were obtained at the end of each episode.
-        episode_lengths (list):
-            A list of the length of each episode.
-        '''
-        data = {'n_holes': self.n_holes, 'rewards': rewards, 'episode_lengths': episode_lengths, 'n_layers': self.n_layers}
-        np.save('data/' + self.savename + '.npy', data)
-        self.model_target.save_weights('models/' + self.savename)
-
-    def interact_env(self, state, action, env):
-        '''
-        Apply sampled action in the environment, receives reward and next state.
-
-        Parameters
-        ----------
-        state (tensor):
-            The state that the agent is in.
-        action (int):
-            The action that the agent decides to take.
-        env (class):
-            The environment that the agent performs an action in.
-        '''
-        reward, done = env.guess(action)
-        next_state = state.copy()
-        next_state.append(action)
-
-        interaction = {'state': state, 'action': action, 'next_state': next_state,
-                       'reward': reward, 'done':np.float32(done)}
-
-        return interaction
+        return returns
 
     @tf.function
-    def Q_learning_update(self, states, actions, rewards, next_states, done):
-        '''
-        Trains the QDQN model.
-
-        Parameters
-        ----------
-        states (array):
-            An array of all the states of the samples that will be used for training.
-        actions (array):
-            An array of all the actions of the samples that will be used for training.
-        rewards (array):
-            An array of all the rewards of the samples that will be used for training.
-        next_states (array):
-            An array of all the states of the samples after the corresponding action has been taken.
-        done (array):
-            An array of whether each sample's next_state was the final state before the game ended.
-        '''
+    def reinforce_update(self, states, actions, returns):
         states = tf.convert_to_tensor(states)
         actions = tf.convert_to_tensor(actions)
-        rewards = tf.convert_to_tensor(rewards)
-        next_states = tf.convert_to_tensor(next_states)
-        done = tf.convert_to_tensor(done)
+        returns = tf.convert_to_tensor(returns)
 
-        # Compute their target q_values and the masks on sampled actions
-        future_rewards = self.model_target([next_states])
-        target_q_values = rewards + (self.gamma * tf.reduce_max(future_rewards, axis=1)
-                                                       * (1.0 - done))
-        masks = tf.one_hot(actions, self.n_holes)
-
-        # Train the model on the states and target Q-values
         with tf.GradientTape() as tape:
             tape.watch(self.model.trainable_variables)
-            q_values = self.model([states])
-            q_values_masked = tf.reduce_sum(tf.multiply(q_values, masks), axis=1)
-            loss = tf.keras.losses.MeanSquaredError()(target_q_values, q_values_masked)
-
-        # Backpropagation
+            logits = self.model(states)
+            p_actions = tf.gather_nd(logits, actions)
+            log_probs = tf.math.log(p_actions)
+            loss = tf.math.reduce_sum(-log_probs * returns) / self.batch_size
         grads = tape.gradient(loss, self.model.trainable_variables)
         for optimizer, w in zip([self.optimizer_in, self.optimizer_var, self.optimizer_out], [self.w_in, self.w_var, self.w_out]):
             optimizer.apply_gradients([(grads[w], self.model.trainable_variables[w])])
 
+    def main(self):
+        # Start training the agent
+        episode_reward_history = []
+        for batch in range(self.n_episodes // self.batch_size):
+            # Gather episodes
+            episodes = self.gather_episodes()
+
+            # Group states, actions and returns in numpy arrays
+            states = np.concatenate([ep['states'] for ep in episodes])
+            actions = np.concatenate([ep['actions'] for ep in episodes])
+            rewards = [ep['rewards'] for ep in episodes]
+            returns = np.concatenate([self.compute_returns(ep_rwds, self.gamma) for ep_rwds in rewards])
+            returns = np.array(returns, dtype=np.float32)
+
+            id_action_pairs = np.array([[i, a] for i, a in enumerate(actions)])
+
+            # Update model parameters.
+            self.reinforce_update(states, id_action_pairs, returns, self.model)
+
+            # Store collected rewards
+            for ep_rwds in rewards:
+                episode_reward_history.append(np.sum(ep_rwds))
+
+            avg_rewards = np.mean(episode_reward_history[-10:])
+
+
 def main():
     '''
-    Initializes all the hyperparameters, creates the base and target network by calling upon dnn.py, and trains and saves the model by calling upon the DQN() class.
+    Initializes all the hyperparameters, creates the base and target network by calling upon dnn.py, and trains and saves the model by calling upon the QRL() class.
     '''
-    n_holes = 5
-    memory_size = 2 * (n_holes - 2)
-    n_qubits = memory_size
-    n_layers = 7  # Number of layers in the PQC
+    env_name = "CartPole-v1"
+
+    n_qubits = 4  # Dimension of the state vectors in CartPole
+    n_layers = 5  # Number of layers in the PQC
+    n_actions = 2  # Number of actions in CartPole
 
     qubits = cirq.GridQubit.rect(1, n_qubits)
     ops = [cirq.Z(q) for q in qubits]
-    observables = []
-    for i in range(n_holes):
-        observables.append(ops[i])
+    observables = [reduce((lambda x, y: x * y), ops)]  # Z_0*Z_1*Z_2*Z_3
 
     n_episodes = 5000
-    learning_rates = [0.0001, 0.01, 0.1]
+    learning_rates = [0.1, 0.01, 0.1]
     gamma = 1
+    beta = 1.0
 
-    # Define replay memory
-    max_size_buffer = 10000 # Maximum replay length
-    min_size_buffer = 1000
-
-    epsilon_start = 1.0  # Epsilon greedy parameter
-    epsilon_min = 0.01  # Minimum epsilon greedy parameter
-    decay_epsilon = 0.01 # Decay rate of epsilon greedy parameter
-    temperature = 0.01 # Temperature parameter for the Boltzmann exploration
+    state_bounds = np.array([2.4, 2.5, 0.21, 2.5])
     batch_size = 64
-    steps_per_train = 10 # Train the model every x steps
-    steps_per_target_update = 10 # parameter for hard updating target network weights
-    tau = 0.05 # parameter for soft updating target network weights
-    soft_weight_update = True # boolean that decides whether to soft update or hard update the target network weights
-    exploration_strategy = 'egreedy' # 'egreedy' or 'boltzmann'
 
     savename = 'test'
 
@@ -299,14 +193,12 @@ def main():
 
     quantum_model = QuantumModel(qubits, n_layers, observables)
 
-    model = quantum_model.generate_model_Qlearning(False)
-    model_target = quantum_model.generate_model_Qlearning(True)
+    model = quantum_model.generate_model_policy(n_actions=n_actions, beta=beta)
 
-    model_target.set_weights(model.get_weights())
+    qrl = QRL(savename=savename, model=model, learning_rates=learning_rates, gamma=gamma, n_episodes=n_episodes, batch_size=batch_size, state_bounds=state_bounds,
+              n_qubits=n_qubits, n_layers=n_layers, n_actions=n_actions, env_name=env_name)
 
-    qdqn = QDQN(savename, model, model_target, n_layers, n_holes, qubits, memory_size, learning_rates, gamma, n_episodes, steps_per_train, soft_weight_update, steps_per_target_update, tau, epsilon_start, epsilon_min, decay_epsilon, temperature, batch_size, min_size_buffer, max_size_buffer, exploration_strategy)
-
-    qdqn.main()
+    qrl.main()
 
     end = time.time()
 

@@ -139,6 +139,21 @@ class QRL():
         for optimizer, w in zip([self.optimizer_in, self.optimizer_var, self.optimizer_out], [self.w_in, self.w_var, self.w_out]):
             optimizer.apply_gradients([(grads[w], self.model.trainable_variables[w])])
 
+    def save_data(self, rewards):
+        '''
+        Saves the model after its training, as well as important results and properties.
+
+        Parameters
+        ----------
+        rewards (list):
+            A list of all the rewards that were obtained at the end of each episode.
+        episode_lengths (list):
+            A list of the length of each episode.
+        '''
+        data = {'rewards': rewards, 'n_layers': self.n_layers}
+        np.save('data/' + self.savename + '.npy', data)
+        self.model.save_weights('models/' + self.savename)
+
     def main(self):
         # Start training the agent
         episode_reward_history = []
@@ -150,19 +165,24 @@ class QRL():
             states = np.concatenate([ep['states'] for ep in episodes])
             actions = np.concatenate([ep['actions'] for ep in episodes])
             rewards = [ep['rewards'] for ep in episodes]
-            returns = np.concatenate([self.compute_returns(ep_rwds, self.gamma) for ep_rwds in rewards])
+            returns = np.concatenate([self.compute_returns(ep_rwds) for ep_rwds in rewards])
             returns = np.array(returns, dtype=np.float32)
 
             id_action_pairs = np.array([[i, a] for i, a in enumerate(actions)])
 
             # Update model parameters.
-            self.reinforce_update(states, id_action_pairs, returns, self.model)
+            self.reinforce_update(states, id_action_pairs, returns)
 
             # Store collected rewards
             for ep_rwds in rewards:
                 episode_reward_history.append(np.sum(ep_rwds))
 
-            avg_rewards = np.mean(episode_reward_history[-10:])
+            print('Training progress: ' + str(batch) + '/' + str(self.n_episodes))
+
+        print('Training progress: ' + str(self.n_episodes) + '/' + str(self.n_episodes))
+
+        if self.savename != False:
+            self.save_data(episode_reward_history)
 
 
 def main():
@@ -179,7 +199,7 @@ def main():
     ops = [cirq.Z(q) for q in qubits]
     observables = [reduce((lambda x, y: x * y), ops)]  # Z_0*Z_1*Z_2*Z_3
 
-    n_episodes = 5000
+    n_episodes = 500
     learning_rates = [0.1, 0.01, 0.1]
     gamma = 1
     beta = 1.0

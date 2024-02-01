@@ -21,7 +21,7 @@ class QuantumModel():
         self.n_layers = n_layers
         self.observables = observables
 
-    def one_qubit_rotation(self, qubit, symbols): # correct
+    def one_qubit_rotation(self, qubit, symbols):
         """
         Returns Cirq gates that apply a rotation of the bloch sphere about the X,
         Y and Z axis, specified by the values in `symbols`.
@@ -30,7 +30,7 @@ class QuantumModel():
                 cirq.ry(symbols[1])(qubit),
                 cirq.rz(symbols[2])(qubit)]
 
-    def entangling_layer(self): # correct
+    def entangling_layer(self):
         """
         Returns a layer of CZ entangling gates on `qubits` (arranged in a circular topology).
         """
@@ -38,7 +38,7 @@ class QuantumModel():
         cz_ops += ([cirq.CZ(self.qubits[0], self.qubits[-1])] if len(self.qubits) != 2 else [])
         return cz_ops
 
-    def generate_circuit(self): # correct
+    def generate_circuit(self):
         """Prepares a data re-uploading circuit on `qubits` with `n_layers` layers."""
         # Number of qubits
         n_qubits = len(self.qubits)
@@ -65,7 +65,7 @@ class QuantumModel():
 
         return circuit, list(params.flat), list(inputs.flat)
 
-    def generate_model_policy(self, n_actions, beta): # check how to pass along variables to this function (whether self. or not)
+    def generate_model_policy(self, n_actions, beta):
         """Generates a Keras model for a data re-uploading PQC policy."""
 
         input_tensor = tf.keras.Input(shape=(len(self.qubits),), dtype=tf.dtypes.float32, name='input')
@@ -80,7 +80,7 @@ class QuantumModel():
 
         return model
 
-class Alternating(tf.keras.layers.Layer): # correct
+class Alternating(tf.keras.layers.Layer):
     def __init__(self, output_dim):
         super(Alternating, self).__init__()
         self.w = tf.Variable(
@@ -90,7 +90,7 @@ class Alternating(tf.keras.layers.Layer): # correct
     def call(self, inputs):
         return tf.matmul(inputs, self.w)
 
-class ReUploadingPQC(tf.keras.layers.Layer): # correct
+class ReUploadingPQC(tf.keras.layers.Layer):
     """
     Performs the transformation (s_1, ..., s_d) -> (theta_1, ..., theta_N, lmbd[1][1]s_1, ..., lmbd[1][M]s_1,
         ......., lmbd[d][1]s_d, ..., lmbd[d][M]s_d) for d=input_dim, N=theta_dim and M=n_layers.

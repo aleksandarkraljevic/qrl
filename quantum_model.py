@@ -11,7 +11,7 @@ from functools import reduce
 tf.get_logger().setLevel('ERROR')
 
 class QRL():
-    def __init__(self, savename, model, learning_rates, gamma, n_episodes, batch_size, state_bounds, n_qubits, n_layers, n_actions, env_name):
+    def __init__(self, savename, model, learning_rates, gamma, n_episodes, batch_size, state_bounds, n_qubits, n_layers, n_actions, env_name, breakout):
         '''
         Initializes the QRL parameters.
 
@@ -72,6 +72,7 @@ class QRL():
         self.n_layers = n_layers
         self.n_actions = n_actions
         self.env_name = env_name
+        self.breakout = breakout
         self.optimizer_in = tf.keras.optimizers.Adam(learning_rate=learning_rates[0], amsgrad=True)
         self.optimizer_var = tf.keras.optimizers.Adam(learning_rate=learning_rates[1], amsgrad=True)
         self.optimizer_out = tf.keras.optimizers.Adam(learning_rate=learning_rates[2], amsgrad=True)
@@ -81,14 +82,14 @@ class QRL():
     def gather_episodes(self):
         """Interact with environment in batched fashion."""
 
-        trajectories = [defaultdict(list) for _ in range(self.n_episodes)]
-        envs = [gym.make(self.env_name) for _ in range(self.n_episodes)]
+        trajectories = [defaultdict(list) for _ in range(self.batch_size)]
+        envs = [gym.make(self.env_name) for _ in range(self.batch_size)]
 
-        done = [False for _ in range(self.n_episodes)]
+        done = [False for _ in range(self.batch_size)]
         states = [e.reset() for e in envs]
 
         while not all(done):
-            unfinished_ids = [i for i in range(self.n_episodes) if not done[i]]
+            unfinished_ids = [i for i in range(self.batch_size) if not done[i]]
             normalized_states = [s / self.state_bounds for i, s in enumerate(states) if not done[i]]
 
             for i, state in zip(unfinished_ids, normalized_states):
@@ -99,7 +100,7 @@ class QRL():
             action_probs = self.model([states])
 
             # Store action and transition all environments to the next state
-            states = [None for i in range(self.n_episodes)]
+            states = [None for i in range(self.batch_size)]
             for i, policy in zip(unfinished_ids, action_probs.numpy()):
                 action = np.random.choice(self.n_actions, p=policy)
                 states[i], reward, done[i], _ = envs[i].step(action)
@@ -157,6 +158,7 @@ class QRL():
     def main(self):
         # Start training the agent
         episode_reward_history = []
+        print('Training progress: ' + '0/' + str(self.n_episodes))
         for batch in range(self.n_episodes // self.batch_size):
             # Gather episodes
             episodes = self.gather_episodes()
@@ -177,9 +179,13 @@ class QRL():
             for ep_rwds in rewards:
                 episode_reward_history.append(np.sum(ep_rwds))
 
-            print('Training progress: ' + str(batch) + '/' + str(self.n_episodes))
+            print('Training progress: ' + str((batch+1)*self.batch_size) + '/' + str(self.n_episodes))
 
-        print('Training progress: ' + str(self.n_episodes) + '/' + str(self.n_episodes))
+            avg_rewards = np.mean(episode_reward_history[-10:])
+
+            if self.breakout:
+                if avg_rewards >= 500.0:
+                    break
 
         if self.savename != False:
             self.save_data(episode_reward_history)
@@ -205,7 +211,9 @@ def main():
     beta = 1.0
 
     state_bounds = np.array([2.4, 2.5, 0.21, 2.5])
-    batch_size = 64
+    batch_size = 10
+
+    breakout = True
 
     savename = 'test'
 
@@ -216,7 +224,7 @@ def main():
     model = quantum_model.generate_model_policy(n_actions=n_actions, beta=beta)
 
     qrl = QRL(savename=savename, model=model, learning_rates=learning_rates, gamma=gamma, n_episodes=n_episodes, batch_size=batch_size, state_bounds=state_bounds,
-              n_qubits=n_qubits, n_layers=n_layers, n_actions=n_actions, env_name=env_name)
+              n_qubits=n_qubits, n_layers=n_layers, n_actions=n_actions, env_name=env_name, breakout=breakout)
 
     qrl.main()
 

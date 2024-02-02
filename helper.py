@@ -53,8 +53,6 @@ def plot_averaged(data_names, show, savename, smooth):
     '''
     n_names = len(data_names)
     data = np.load('data/'+data_names[0]+'.npy', allow_pickle=True)
-    n_holes = data.item().get('n_holes')
-    memory_size = 2 * (n_holes - 2)
     rewards = data.item().get('rewards')
     episodes = np.arange(1, len(rewards) + 1)
     for i in range(n_names-1):
@@ -63,8 +61,8 @@ def plot_averaged(data_names, show, savename, smooth):
         rewards = np.vstack((rewards, new_rewards))
     mean_rewards = np.mean(rewards, axis=0)
     se_rewards = np.std(rewards, axis=0) / np.sqrt(n_names) # standard error
-    lower_bound = np.clip(mean_rewards-se_rewards, None , 0)
-    upper_bound = np.clip(mean_rewards+se_rewards, None, 0)
+    lower_bound = np.clip(mean_rewards-se_rewards, 0, 500)
+    upper_bound = np.clip(mean_rewards+se_rewards,0, 500)
     if smooth == True:
         mean_rewards = savgol_filter(mean_rewards, 71, 1)
     dataframe = np.vstack((mean_rewards, episodes)).transpose()
@@ -74,7 +72,6 @@ def plot_averaged(data_names, show, savename, smooth):
     sns.set_theme()
     sns.lineplot(data=dataframe, x='Episode', y='Reward')
     plt.fill_between(episodes, lower_bound, upper_bound, color='b', alpha=0.2)
-    plt.ylim(-1*memory_size,0)
     plt.title('Mean reward per episode')
     if savename != False:
         plt.savefig('plots/'+savename+'.png')
@@ -107,8 +104,6 @@ def compare_models(parameter_names, repetitions, show, savename, label_names, sm
 
     for experiment in range(len(parameter_names)):
         data = np.load('data/'+parameter_names[experiment]+'-repetition_1.npy', allow_pickle=True)
-        n_holes = data.item().get('n_holes')
-        memory_size = 2*(n_holes-2)
         rewards = data.item().get('rewards')
         episodes = np.arange(1, len(rewards) + 1)
         for i in range(repetitions-1):
@@ -117,8 +112,8 @@ def compare_models(parameter_names, repetitions, show, savename, label_names, sm
             rewards = np.vstack((rewards, new_rewards))
         mean_rewards = np.mean(rewards, axis=0)
         se_rewards = np.std(rewards, axis=0) / np.sqrt(repetitions)  # standard error
-        lower_bound = np.clip(mean_rewards - se_rewards, None, 0)
-        upper_bound = np.clip(mean_rewards + se_rewards, None, 0)
+        lower_bound = np.clip(mean_rewards - se_rewards, 0, 500)
+        upper_bound = np.clip(mean_rewards + se_rewards, 0, 500)
         if smooth == True:
             mean_rewards = savgol_filter(mean_rewards, 71, 1)
         dataframe = np.vstack((mean_rewards, episodes)).transpose()
@@ -126,7 +121,6 @@ def compare_models(parameter_names, repetitions, show, savename, label_names, sm
 
         sns.lineplot(data=dataframe, x='Episode', y='Reward', label=label_names[experiment])
         plt.fill_between(episodes, lower_bound, upper_bound, color=colors_list[experiment], alpha=0.1)
-        plt.ylim(-1 * memory_size, 0)
 
     plt.title('Mean reward per episode')
     if savename != False:

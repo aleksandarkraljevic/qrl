@@ -11,7 +11,7 @@ from functools import reduce
 tf.get_logger().setLevel('ERROR')
 
 class QRL():
-    def __init__(self, savename, model, learning_rates, gamma, n_episodes, batch_size, state_bounds, n_qubits, n_layers, n_actions, env_name, breakout):
+    def __init__(self, savename, model, n_qubits, n_layers, n_actions, env_name, n_episodes, batch_size, learning_rates, gamma, state_bounds, breakout):
         '''
         Initializes the QRL parameters.
 
@@ -21,46 +21,26 @@ class QRL():
             The name with which the file model and data files will be saved.
         model (tensorflow keras model):
             The base network.
-        model_target (tensorflow keras model):
-            The target network.
+        n_qubits (int):
+            The number of qubits that the PQC will use.
         n_layers (int):
             The number of layers that the PQC will contain.
-        n_holes (int):
-            Number of outputs of the DNN. / Number of holes in the environment.
-        qubits (int):
-            The number of qubits that the PQC will use.
-        memory_size (int):
-            The amount of guesses that the agent is allowed to look back. / The state-space size.
+        n_actions (int):
+            The number of actions that the agent can take in the environment.
+        env_name (str):
+            The name of the gym environment that is used to train the agent on.
+        n_episodes (int):
+            The amount of total episodes that the model trains for.
+        batch_size (int):
+            The amount of samples that each training batch consists of.
         learning_rates (list):
             A list of three learning rates that the optimizers within the PQC use in order to update the encoding, variational, and rescaling weights.
         gamma (float):
             The discount factor that is used in the Q-learning algorithm.
-        n_episodes (int):
-            The amount of total episodes that the model will train for.
-        steps_per_train (int):
-            The amount of time steps that pass in between each training step.
-        soft_weight_update (boolean):
-            Whether the target network will be updated via soft-updating. If False, then it will be hard-updating.
-        steps_per_target_update (int):
-            Per how many training steps the target network will update, if it is hard-updating.
-        tau (float):
-            The fraction with which the base network copies over to the target network after each training step.
-        epsilon_start (float):
-            The starting value of epsilon in the case that annealing epsilon-greedy is used.
-        epsilon_min (float):
-            The lowest value of epsilon in the case that annealing epsilon-greedy is used.
-        decay_epsilon (float):
-            How fast epsilon decays in the case that annealing epsilon-greedy is used.
-        temperature (float):
-            The strength with which exploration finds place in the case that the Boltzmann policy is used.
-        batch_size (int):
-            The amount of samples that each training batch consists of.
-        min_size_buffer (int):
-            The minimum size that the experience replay buffer needs to be before training may start.
-        max_size_buffer (int):
-            The maximum size that the experience replay buffer is allowed to be. If this limit is reached then the oldest samples start being replaced with the newest samples.
-        exploration_strategy (str):
-            What exploration strategy should be followed during the training of the model. Either "egreedy" or "boltzmann".
+        state_bounds (array):
+            An array containing four float values that represent the bounds on the cartpole states.
+        breakout (boolean):
+            A boolean value that decides whether the agent should stop its training after it has "beaten" the game.
         '''
         self.savename = savename
         self.model = model
@@ -147,9 +127,7 @@ class QRL():
         Parameters
         ----------
         rewards (list):
-            A list of all the rewards that were obtained at the end of each episode.
-        episode_lengths (list):
-            A list of the length of each episode.
+            A list of all the total rewards that were obtained at the end of each episode.
         '''
         data = {'rewards': rewards, 'n_layers': self.n_layers}
         np.save('data/' + self.savename + '.npy', data)
@@ -223,8 +201,9 @@ def main():
 
     model = quantum_model.generate_model_policy(n_actions=n_actions, beta=beta)
 
-    qrl = QRL(savename=savename, model=model, learning_rates=learning_rates, gamma=gamma, n_episodes=n_episodes, batch_size=batch_size, state_bounds=state_bounds,
-              n_qubits=n_qubits, n_layers=n_layers, n_actions=n_actions, env_name=env_name, breakout=breakout)
+    qrl = QRL(savename=savename, model=model, n_qubits=n_qubits, n_layers=n_layers, n_actions=n_actions,
+              env_name=env_name, n_episodes=n_episodes, batch_size=batch_size, learning_rates=learning_rates,
+              gamma=gamma, state_bounds=state_bounds, breakout=breakout)
 
     qrl.main()
 

@@ -65,11 +65,35 @@ class QuantumModel():
 
         return circuit, list(params.flat), list(inputs.flat)
 
-    def generate_model_policy(self, n_actions, beta):
+    def generate_flipped_circuit(self):
+        """Prepares a data re-uploading circuit on `qubits` with `n_layers` layers."""
+        # Number of qubits
+        n_qubits = len(self.qubits)
+
+        # Sympy symbols for variational angles
+        params = sympy.symbols(f'theta(0:{3*(self.n_layers)*n_qubits})')
+        params = np.asarray(params).reshape((self.n_layers, n_qubits, 3))
+
+        # Sympy symbols for encoding angles
+        inputs = sympy.symbols(f'x(0:{self.n_layers})'+f'_(0:{n_qubits})')
+        inputs = np.asarray(inputs).reshape((self.n_layers, n_qubits))
+
+        # Define circuit
+        circuit = cirq.Circuit()
+        for l in range(self.n_layers): # A layer contains only variational parts
+            # Variational layer
+            circuit += cirq.Circuit(self.one_qubit_rotation(q, params[l, i]) for i, q in enumerate(self.qubits))
+            circuit += self.entangling_layer()
+        # Encoding layer
+        circuit += cirq.Circuit(cirq.rx(inputs[l, i])(q) for i, q in enumerate(self.qubits))
+
+        return circuit, list(params.flat), list(inputs.flat)
+
+    def generate_model_policy(self, n_actions, beta, flipped_model):
         """Generates a Keras model for a data re-uploading PQC policy."""
 
         input_tensor = tf.keras.Input(shape=(len(self.qubits),), dtype=tf.dtypes.float32, name='input')
-        re_uploading_pqc = ReUploadingPQC(self.qubits, self.n_layers, self.observables)([input_tensor])
+        re_uploading_pqc = ReUploadingPQC(self.qubits, self.n_layers, self.observables, flipped_model)([input_tensor])
         process = tf.keras.Sequential([
             Alternating(n_actions),
             tf.keras.layers.Lambda(lambda x: x * beta),
@@ -100,13 +124,16 @@ class ReUploadingPQC(tf.keras.layers.Layer):
         by the ControlledPQC.
     """
 
-    def __init__(self, qubits, n_layers, observables, activation="linear", name="re-uploading_PQC"):
+    def __init__(self, qubits, n_layers, observables, flipped_model, activation="linear", name="re-uploading_PQC"):
         super(ReUploadingPQC, self).__init__(name=name)
         self.n_layers = n_layers
         self.n_qubits = len(qubits)
 
         quantum_model = QuantumModel(qubits, n_layers, observables)
-        circuit, theta_symbols, input_symbols = quantum_model.generate_circuit()
+        if flipped_model:
+            circuit, theta_symbols, input_symbols = quantum_model.generate_flipped_circuit()
+        else:
+            circuit, theta_symbols, input_symbols = quantum_model.generate_circuit()
 
         theta_init = tf.random_uniform_initializer(minval=0.0, maxval=np.pi)
         self.theta = tf.Variable(

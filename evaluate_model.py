@@ -35,11 +35,11 @@ def main():
     label_names = ['layers_9', 'layers_10']
     parameter_name = 'test_experiment'
 
-    plot(data_name='test_experiment-repetition_2', show=True, savename='test_experiment-repetition_2', smooth=False)
+    #plot(data_name='test', show=True, savename='test', smooth=False)
 
     #compare_models(parameter_names=parameter_names, repetitions=20, show=True, savename='compare_layers_9_10', label_names=label_names, smooth=True)
 
-    plot_experiment(parameter_name, 2, True, True)
+    plot_experiment(parameter_name, 10, True, True)
 
 
 if __name__ == '__main__':

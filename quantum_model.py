@@ -174,14 +174,21 @@ def main():
     Initializes all the hyperparameters, creates the base and target network by calling upon dnn.py, and trains and saves the model by calling upon the QRL() class.
     '''
     env_name = "CartPole-v1"
+    flipped_model = True # whether to use the flipped model or the non-flipped model
 
     n_qubits = 4  # Dimension of the state vectors in CartPole
-    n_layers = 5  # Number of layers in the PQC
     n_actions = 2  # Number of actions in CartPole
-
     qubits = cirq.GridQubit.rect(1, n_qubits)
-    ops = [cirq.Z(q) for q in qubits]
-    observables = [reduce((lambda x, y: x * y), ops)]  # Z_0*Z_1*Z_2*Z_3
+
+    if flipped_model:
+        n_layers = 1  # Number of layers in the PQC
+        ops = [cirq.I(q) for q in qubits]
+        ops[0], ops[-1] = cirq.Z(qubits[0]), cirq.Z(qubits[-1])
+        observables = [reduce((lambda x, y: x * y), ops)]  # Z_0*Z_1*Z_2*Z_3
+    else:
+        n_layers = 5  # Number of layers in the PQC
+        ops = [cirq.Z(q) for q in qubits]
+        observables = [reduce((lambda x, y: x * y), ops)]  # Z_0*Z_1*Z_2*Z_3
 
     n_episodes = 500
     learning_rates = [0.1, 0.01, 0.1]
@@ -197,9 +204,9 @@ def main():
 
     start = time.time()
 
-    quantum_model = QuantumModel(qubits, n_layers, observables)
+    quantum_model = QuantumModel(qubits=qubits, n_layers=n_layers, observables=observables)
 
-    model = quantum_model.generate_model_policy(n_actions=n_actions, beta=beta)
+    model = quantum_model.generate_model_policy(n_actions=n_actions, beta=beta, flipped_model=flipped_model)
 
     qrl = QRL(savename=savename, model=model, n_qubits=n_qubits, n_layers=n_layers, n_actions=n_actions,
               env_name=env_name, n_episodes=n_episodes, batch_size=batch_size, learning_rates=learning_rates,

@@ -71,12 +71,12 @@ class QuantumModel():
         n_qubits = len(self.qubits)
 
         # Sympy symbols for variational angles
-        params = sympy.symbols(f'theta(0:{3*(self.n_layers)*n_qubits})')
+        params = sympy.symbols(f'theta(0:{3*self.n_layers*n_qubits})')
         params = np.asarray(params).reshape((self.n_layers, n_qubits, 3))
 
         # Sympy symbols for encoding angles
-        inputs = sympy.symbols(f'x(0:{self.n_layers})'+f'_(0:{n_qubits})')
-        inputs = np.asarray(inputs).reshape((self.n_layers, n_qubits))
+        inputs = sympy.symbols(f'x(0:{n_qubits})')
+        inputs = np.asarray(inputs).reshape((1, n_qubits))
 
         # Define circuit
         circuit = cirq.Circuit()
@@ -85,7 +85,7 @@ class QuantumModel():
             circuit += cirq.Circuit(self.one_qubit_rotation(q, params[l, i]) for i, q in enumerate(self.qubits))
             circuit += self.entangling_layer()
         # Encoding layer
-        circuit += cirq.Circuit(cirq.rx(inputs[l, i])(q) for i, q in enumerate(self.qubits))
+        circuit += cirq.Circuit(cirq.rx(inputs[0, i])(q) for i, q in enumerate(self.qubits))
 
         return circuit, list(params.flat), list(inputs.flat)
 

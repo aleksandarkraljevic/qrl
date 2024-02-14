@@ -184,7 +184,7 @@ def main():
         n_layers = 1  # Number of layers in the PQC
         ops = [cirq.I(q) for q in qubits]
         ops[0], ops[-1] = cirq.Z(qubits[0]), cirq.Z(qubits[-1])
-        observables = [reduce((lambda x, y: x * y), ops)]  # Z_0*Z_1*Z_2*Z_3
+        observables = [reduce((lambda x, y: x * y), ops)]  # Z_0*I*I*Z_3
     else:
         n_layers = 5  # Number of layers in the PQC
         ops = [cirq.Z(q) for q in qubits]

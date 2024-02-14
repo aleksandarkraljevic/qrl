@@ -1,2 +1,2 @@
-model_checkpoint_path: "test_experiment-repetition_10"
-all_model_checkpoint_paths: "test_experiment-repetition_10"
+model_checkpoint_path: "test"
+all_model_checkpoint_paths: "test"

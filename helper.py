@@ -1,8 +1,10 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
+import itertools
 from collections import deque
 from scipy.signal import savgol_filter
+from functools import reduce
 from pqc import *
 
 def plot(data_name, show, savename, smooth):
@@ -23,7 +25,7 @@ def plot(data_name, show, savename, smooth):
     data = np.load('data/'+data_name+'.npy', allow_pickle=True)
     rewards = data.item().get('rewards')
     if smooth==True:
-        rewards = savgol_filter(rewards, 71, 1)
+        rewards = savgol_filter(rewards, 21, 1)
     episodes = np.arange(1, len(rewards) + 1)
     dataframe = np.vstack((rewards, episodes)).transpose()
     dataframe = pd.DataFrame(data=dataframe, columns=['Reward', 'Episode'])
@@ -64,7 +66,7 @@ def plot_averaged(data_names, show, savename, smooth):
     lower_bound = np.clip(mean_rewards-se_rewards, 0, 500)
     upper_bound = np.clip(mean_rewards+se_rewards,0, 500)
     if smooth == True:
-        mean_rewards = savgol_filter(mean_rewards, 71, 1)
+        mean_rewards = savgol_filter(mean_rewards, 21, 1)
     dataframe = np.vstack((mean_rewards, episodes)).transpose()
     dataframe = pd.DataFrame(data=dataframe, columns=['Reward', 'Episode'])
 
@@ -115,7 +117,7 @@ def compare_models(parameter_names, repetitions, show, savename, label_names, sm
         lower_bound = np.clip(mean_rewards - se_rewards, 0, 500)
         upper_bound = np.clip(mean_rewards + se_rewards, 0, 500)
         if smooth == True:
-            mean_rewards = savgol_filter(mean_rewards, 71, 1)
+            mean_rewards = savgol_filter(mean_rewards, 21, 1)
         dataframe = np.vstack((mean_rewards, episodes)).transpose()
         dataframe = pd.DataFrame(data=dataframe, columns=['Reward', 'Episode'])
 
@@ -127,3 +129,26 @@ def compare_models(parameter_names, repetitions, show, savename, label_names, sm
         plt.savefig('plots/' + savename + '.png')
     if show:
         plt.show()
+
+def k_local_iterator(k, qubit_ind, possible_operations, qubits):
+    if k == 0:
+        yield cirq.I(qubits[qubit_ind])
+        return
+    for op in possible_operations:
+        if qubit_ind == 0:
+            yield op(qubits[qubit_ind])
+        else:
+            for next_op in k_local_iterator(k - 1, qubit_ind - 1, possible_operations, qubits):
+                yield op(qubits[qubit_ind])*next_op
+    if qubit_ind >= k:
+        for next_op in k_local_iterator(k, qubit_ind - 1, possible_operations, qubits):
+            yield next_op
+
+def get_k_local(k, n_qubits):
+    possible_operations = [cirq.Z, cirq.Y]
+    qubits = cirq.GridQubit.rect(1, n_qubits)
+    pauli_strings = []
+    for j in range(1, k + 1):
+        for combination in k_local_iterator(j, n_qubits - 1, possible_operations, qubits):
+            pauli_strings.append(combination)
+    return pauli_strings

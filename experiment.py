@@ -3,19 +3,23 @@ from quantum_model import *
 env_name = "CartPole-v1"
 flipped_model = True # whether to use the flipped model or the non-flipped model
 # amount of repetitions that will be averaged over for the experiment
-repetitions = 10
+repetitions = 1
 # amount of episodes that will run
-n_episodes = 500
+n_episodes = 50
 n_qubits = 4
 n_actions = 2
+locality = 3 # the k-locality of the observables
 
 qubits = cirq.GridQubit.rect(1, n_qubits)
 
 if flipped_model:
     n_layers = 1  # Number of layers in the PQC
-    ops = [cirq.I(q) for q in qubits]
-    ops[0], ops[-1] = cirq.Z(qubits[0]), cirq.Z(qubits[-1])
-    observables = [reduce((lambda x, y: x * y), ops)]  # Z_0*Z_1*Z_2*Z_3
+    #ops = [cirq.I(q) for q in qubits]
+    #ops[0], ops[-1] = cirq.Z(qubits[0]), cirq.Z(qubits[-1]) # Z_0*I*I*Z_3
+    #observables = [reduce((lambda x, y: x * y), ops)]
+    pauli_strings = get_k_local(k=locality, n_qubits=n_qubits)
+    linear_combination = [sum(pauli_strings)]
+    observables = linear_combination
 else:
     n_layers = 5  # Number of layers in the PQC
     ops = [cirq.Z(q) for q in qubits]
@@ -36,7 +40,7 @@ data_names = []
 
 start = time.time()
 
-savename = 'test_experiment'
+savename = 'test'
 for rep in range(repetitions):
     file_name = savename + '-repetition_' + str(rep + 1)
 
@@ -54,8 +58,8 @@ for rep in range(repetitions):
 
     print('Finished repetition '+str(rep+1)+'/'+str(repetitions))
 
-plot_averaged(data_names=data_names, show=False, savename=savename, smooth=False)
-plot_averaged(data_names=data_names, show=False, savename=savename+'-smooth', smooth=True)
+#plot_averaged(data_names=data_names, show=False, savename=savename, smooth=False)
+#plot_averaged(data_names=data_names, show=False, savename=savename+'-smooth', smooth=True)
 
 data_names = []
 

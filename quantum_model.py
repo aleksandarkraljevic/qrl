@@ -7,7 +7,6 @@ import gym, cirq, sympy
 import time
 import numpy as np
 from collections import deque, defaultdict
-from functools import reduce
 tf.get_logger().setLevel('ERROR')
 
 class QRL():
@@ -178,13 +177,18 @@ def main():
 
     n_qubits = 4  # Dimension of the state vectors in CartPole
     n_actions = 2  # Number of actions in CartPole
+    locality = 3 # the k-locality of the observables
     qubits = cirq.GridQubit.rect(1, n_qubits)
 
     if flipped_model:
         n_layers = 1  # Number of layers in the PQC
-        ops = [cirq.I(q) for q in qubits]
-        ops[0], ops[-1] = cirq.Z(qubits[0]), cirq.Z(qubits[-1])
-        observables = [reduce((lambda x, y: x * y), ops)]  # Z_0*I*I*Z_3
+        #ops = [cirq.I(q) for q in qubits]
+        #ops[0], ops[-1] = cirq.Z(qubits[0]), cirq.Z(qubits[-1])
+        #observables = [reduce((lambda x, y: x * y), ops)]  # Z_0*I*I*Z_3
+        pauli_strings = get_k_local(k=locality, n_qubits=n_qubits)
+        linear_combination = [sum(pauli_strings)]
+        observables = linear_combination
+        print(observables)
     else:
         n_layers = 5  # Number of layers in the PQC
         ops = [cirq.Z(q) for q in qubits]

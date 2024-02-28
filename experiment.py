@@ -1,11 +1,12 @@
 from quantum_model import *
+from argparse import ArgumentParser
 
 env_name = "CartPole-v1"
 flipped_model = True # whether to use the flipped model or the non-flipped model
 # amount of repetitions that will be averaged over for the experiment
-repetitions = 1
+repetitions = 20
 # amount of episodes that will run
-n_episodes = 50
+n_episodes = 500
 n_qubits = 4
 n_actions = 2
 locality = 3 # the k-locality of the observables
@@ -13,7 +14,7 @@ locality = 3 # the k-locality of the observables
 qubits = cirq.GridQubit.rect(1, n_qubits)
 
 if flipped_model:
-    n_layers = 1  # Number of layers in the PQC
+    n_layers = 1  # Number of variational layers in the PQC. Note that currently it only applies a Y and Z rotation
     #ops = [cirq.I(q) for q in qubits]
     #ops[0], ops[-1] = cirq.Z(qubits[0]), cirq.Z(qubits[-1]) # Z_0*I*I*Z_3
     #observables = [reduce((lambda x, y: x * y), ops)]
@@ -40,7 +41,11 @@ data_names = []
 
 start = time.time()
 
-savename = 'test'
+argparser = ArgumentParser()
+argparser.add_argument("savename", default="cpu-test", nargs="?")
+args = argparser.parse_args()
+savename = args.savename
+
 for rep in range(repetitions):
     file_name = savename + '-repetition_' + str(rep + 1)
 
@@ -58,11 +63,11 @@ for rep in range(repetitions):
 
     print('Finished repetition '+str(rep+1)+'/'+str(repetitions))
 
-#plot_averaged(data_names=data_names, show=False, savename=savename, smooth=False)
-#plot_averaged(data_names=data_names, show=False, savename=savename+'-smooth', smooth=True)
+plot_averaged(data_names=data_names, show=False, savename=savename, smooth=False)
+plot_averaged(data_names=data_names, show=False, savename=savename+'-smooth', smooth=True)
 
 data_names = []
 
 end = time.time()
 
-print('Total time: {} seconds (number of episodes: {})'.format(round(end - start, 1), n_episodes))
+print('Total time: {} seconds'.format(round(end - start, 1)))

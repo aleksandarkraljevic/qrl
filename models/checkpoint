@@ -1,2 +1,2 @@
-model_checkpoint_path: "test"
-all_model_checkpoint_paths: "test"
+model_checkpoint_path: "lr_var_0.0001-repetition_20"
+all_model_checkpoint_paths: "lr_var_0.0001-repetition_20"

@@ -1,8 +1,6 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
-import itertools
-from collections import deque
 from scipy.signal import savgol_filter
 from functools import reduce
 from pqc import *
@@ -62,9 +60,9 @@ def plot_averaged(data_names, show, savename, smooth):
         new_rewards = data.item().get('rewards')
         rewards = np.vstack((rewards, new_rewards))
     mean_rewards = np.mean(rewards, axis=0)
-    se_rewards = np.std(rewards, axis=0) / np.sqrt(n_names) # standard error
-    lower_bound = np.clip(mean_rewards-se_rewards, 0, 500)
-    upper_bound = np.clip(mean_rewards+se_rewards,0, 500)
+    std_rewards = np.std(rewards, axis=0) # standard deviation
+    lower_bound = np.clip(mean_rewards-std_rewards, 0, 500)
+    upper_bound = np.clip(mean_rewards+std_rewards,0, 500)
     if smooth == True:
         mean_rewards = savgol_filter(mean_rewards, 21, 1)
     dataframe = np.vstack((mean_rewards, episodes)).transpose()
@@ -113,9 +111,9 @@ def compare_models(parameter_names, repetitions, show, savename, label_names, sm
             new_rewards = data.item().get('rewards')
             rewards = np.vstack((rewards, new_rewards))
         mean_rewards = np.mean(rewards, axis=0)
-        se_rewards = np.std(rewards, axis=0) / np.sqrt(repetitions)  # standard error
-        lower_bound = np.clip(mean_rewards - se_rewards, 0, 500)
-        upper_bound = np.clip(mean_rewards + se_rewards, 0, 500)
+        std_rewards = np.std(rewards, axis=0)  # standard deviation
+        lower_bound = np.clip(mean_rewards - std_rewards, 0, 500)
+        upper_bound = np.clip(mean_rewards + std_rewards, 0, 500)
         if smooth == True:
             mean_rewards = savgol_filter(mean_rewards, 21, 1)
         dataframe = np.vstack((mean_rewards, episodes)).transpose()

@@ -30,6 +30,14 @@ class QuantumModel():
                 cirq.ry(symbols[1])(qubit),
                 cirq.rz(symbols[2])(qubit)]
 
+    def reduced_one_qubit_rotation(self, qubit, symbols):
+        """
+        Returns Cirq gates that apply a rotation of the bloch sphere about the
+        Y and Z axis, specified by the values in `symbols`.
+        """
+        return [cirq.ry(symbols[0])(qubit),
+                cirq.rz(symbols[1])(qubit)]
+
     def entangling_layer(self):
         """
         Returns a layer of CZ entangling gates on `qubits` (arranged in a circular topology).

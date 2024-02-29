@@ -31,13 +31,13 @@ def main():
     '''
     This function evalutes what the user is interested in evaluating. Each of the following lines can be commented or uncommented depending on what the user exactly wants to evaluate
     '''
-    parameter_names = ['layers_9', 'layers_10']
-    label_names = ['layers_9', 'layers_10']
-    parameter_name = 'full_comb'
+    parameter_names = ['full_comb', 'reduced_layer']
+    label_names = ['XYZ', 'YZ']
+    parameter_name = 'non_flipped'
 
     #plot(data_name='test', show=True, savename='test', smooth=False)
 
-    #compare_models(parameter_names=parameter_names, repetitions=20, show=True, savename='compare_layers_9_10', label_names=label_names, smooth=True)
+    #compare_models(parameter_names=parameter_names, repetitions=20, show=True, savename='check_reduced_layer_smooth', label_names=label_names, smooth=True)
 
     plot_experiment(parameter_name, 20, True, True)
 

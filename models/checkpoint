@@ -1,2 +1,2 @@
-model_checkpoint_path: "lr_var_0.0001-repetition_20"
-all_model_checkpoint_paths: "lr_var_0.0001-repetition_20"
+model_checkpoint_path: "reduced_layer-repetition_20"
+all_model_checkpoint_paths: "reduced_layer-repetition_20"

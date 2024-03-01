@@ -2,11 +2,11 @@ from quantum_model import *
 from argparse import ArgumentParser
 
 env_name = "CartPole-v1"
-flipped_model = True # whether to use the flipped model or the non-flipped model
+flipped_model = False # whether to use the flipped model or the non-flipped model
 # amount of repetitions that will be averaged over for the experiment
 repetitions = 20
 # amount of episodes that will run
-n_episodes = 500
+n_episodes = 2000
 n_qubits = 4
 n_actions = 2
 locality = 3 # the k-locality of the observables
@@ -42,12 +42,12 @@ data_names = []
 start = time.time()
 
 argparser = ArgumentParser()
-argparser.add_argument("savename", default="cpu-test", nargs="?")
+argparser.add_argument("savename", default="test", nargs="?")
 args = argparser.parse_args()
 savename = args.savename
 
 for rep in range(repetitions):
-    file_name = savename + '-repetition_' + str(rep + 1)
+    file_name = savename+'-repetition_' + str(rep + 1)
 
     quantum_model = QuantumModel(qubits=qubits, n_layers=n_layers, observables=observables)
 

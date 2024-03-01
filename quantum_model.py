@@ -130,7 +130,7 @@ class QRL():
         '''
         data = {'rewards': rewards, 'n_layers': self.n_layers}
         np.save('data/' + self.savename + '.npy', data)
-        self.model.save_weights('models/' + self.savename)
+        #self.model.save_weights('models/' + self.savename) # saves the final model weights
 
     def main(self):
         # Start training the agent

@@ -27,17 +27,37 @@ def plot_experiment(parameter_name, repetitions, show, save):
         plot_averaged(data_names=data_names, show=show, savename=False, smooth=False)
         plot_averaged(data_names=data_names, show=show, savename=False, smooth=True)
 
+def plot_comparison(parameter_names, repetitions, show, savename, label_names):
+    '''
+    Plots a comparison between multiple experiments. Both raw plots and smoothed plots are performed.
+
+    Parameters
+    ----------
+    parameter_names (str):
+        The name of the experiments' files, excluding "-repeition_" onwards.
+    repetitions (int):
+        The number of repetitions that the experiment contains.
+    show (boolean):
+        Whether the plots will be shown to the user.
+    savename (str):
+        The name that the comparison plots will be saved as.
+    label_names (str):
+        The names that the labels in the legend will be, of which each one represents one of the experiments.
+    '''
+    compare_models(parameter_names=parameter_names, repetitions=repetitions, show=show, savename=savename, label_names=label_names, smooth=False)
+    compare_models(parameter_names=parameter_names, repetitions=repetitions, show=show, savename=savename+'-smooth ', label_names=label_names, smooth=True)
+
 def main():
     '''
     This function evalutes what the user is interested in evaluating. Each of the following lines can be commented or uncommented depending on what the user exactly wants to evaluate
     '''
-    parameter_names = ['full_comb', 'reduced_layer']
-    label_names = ['XYZ', 'YZ']
-    parameter_name = 'non_flipped'
+    parameter_names = ['lr_in_0.5-lr_var_0.1-lr_out_0.01', 'lr_in_0.5-lr_var_0.01-lr_out_0.1', 'lr_in_0.5-lr_var_0.001-lr_out_0.5']
+    label_names = [r'$\theta=0.1, w=0.01$', r'$\theta=0.01, w=0.1$', r'$\theta=0.001, w=0.5$']
+    parameter_name = 'lr_in_0.1-lr_var_0.1-lr_out_0.5'
 
     #plot(data_name='test', show=True, savename='test', smooth=False)
 
-    #compare_models(parameter_names=parameter_names, repetitions=20, show=True, savename='check_reduced_layer_smooth', label_names=label_names, smooth=True)
+    #plot_comparison(parameter_names=parameter_names, repetitions=20, show=True, savename='lr_in_0.5', label_names=label_names)
 
     plot_experiment(parameter_name, 20, True, True)
 

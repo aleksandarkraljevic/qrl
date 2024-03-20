@@ -51,15 +51,17 @@ def main():
     '''
     This function evalutes what the user is interested in evaluating. Each of the following lines can be commented or uncommented depending on what the user exactly wants to evaluate
     '''
-    parameter_names = ['lr_in_0.5-lr_var_0.1-lr_out_0.01', 'lr_in_0.5-lr_var_0.01-lr_out_0.1', 'lr_in_0.5-lr_var_0.001-lr_out_0.5']
-    label_names = [r'$\theta=0.1, w=0.01$', r'$\theta=0.01, w=0.1$', r'$\theta=0.001, w=0.5$']
-    parameter_name = 'lr_in_0.1-lr_var_0.1-lr_out_0.5'
+    parameter_names = ['lr_in_0.1-lr_var_0.01-lr_out_0.01', 'test']
+    label_names = ['Flipped', r'Non-Flipped']
+    parameter_name = 'test'
 
-    #plot(data_name='test', show=True, savename='test', smooth=False)
+    plot(data_name='test-repetition_9', show=True, savename='test', smooth=False)
 
-    #plot_comparison(parameter_names=parameter_names, repetitions=20, show=True, savename='lr_in_0.5', label_names=label_names)
+    #plot_comparison(parameter_names=parameter_names, repetitions=20, show=True, savename='compare-1_layer_flipped-vs-5_layer_non_flipped', label_names=label_names)
 
-    plot_experiment(parameter_name, 20, True, True)
+    #plot_experiment(parameter_name, 20, True, True)
+
+    #compare_training_steps(parameter_names=parameter_names, repetitions=20, convergence_points=[500, 1500])
 
 
 if __name__ == '__main__':

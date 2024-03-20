@@ -119,8 +119,9 @@ def compare_models(parameter_names, repetitions, show, savename, label_names, sm
         dataframe = np.vstack((mean_rewards, episodes)).transpose()
         dataframe = pd.DataFrame(data=dataframe, columns=['Reward', 'Episode'])
 
-        sns.lineplot(data=dataframe, x='Episode', y='Reward', label=label_names[experiment])
+        plot = sns.lineplot(data=dataframe, x='Episode', y='Reward', label=label_names[experiment])
         plt.fill_between(episodes, lower_bound, upper_bound, color=colors_list[experiment], alpha=0.1)
+        sns.move_legend(plot, "upper left")
 
     plt.title('Mean reward per episode')
     if savename != False:
@@ -150,3 +151,15 @@ def get_k_local(k, n_qubits):
         for combination in k_local_iterator(j, n_qubits - 1, possible_operations, qubits):
             pauli_strings.append(combination)
     return pauli_strings
+
+def compare_training_steps(parameter_names, repetitions, convergence_points):
+    for experiment in range(len(parameter_names)):
+        data = np.load('data/'+parameter_names[experiment]+'-repetition_1.npy', allow_pickle=True)
+        rewards = data.item().get('rewards')
+        for i in range(repetitions-1):
+            data = np.load('data/'+parameter_names[experiment]+'-repetition_'+str(i+2)+'.npy', allow_pickle=True)
+            new_rewards = data.item().get('rewards')
+            rewards = np.vstack((rewards, new_rewards))
+        mean_rewards = np.mean(rewards, axis=0)
+
+        print('Number of training steps until convergence for "'+str(parameter_names[experiment])+'":', round(np.sum(mean_rewards[::convergence_points[experiment]])))

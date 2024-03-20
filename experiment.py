@@ -2,7 +2,7 @@ from quantum_model import *
 from argparse import ArgumentParser
 
 env_name = "CartPole-v1"
-flipped_model = False # whether to use the flipped model or the non-flipped model
+flipped_model = True # whether to use the flipped model or the non-flipped model
 # amount of repetitions that will be averaged over for the experiment
 repetitions = 20
 # amount of episodes that will run
@@ -14,10 +14,7 @@ locality = 3 # the k-locality of the observables
 qubits = cirq.GridQubit.rect(1, n_qubits)
 
 if flipped_model:
-    n_layers = 1  # Number of variational layers in the PQC. Note that currently it only applies a Y and Z rotation
-    #ops = [cirq.I(q) for q in qubits]
-    #ops[0], ops[-1] = cirq.Z(qubits[0]), cirq.Z(qubits[-1]) # Z_0*I*I*Z_3
-    #observables = [reduce((lambda x, y: x * y), ops)]
+    n_layers = 1  # Number of variational layers in the PQC
     pauli_strings = get_k_local(k=locality, n_qubits=n_qubits)
     linear_combination = [sum(pauli_strings)]
     observables = linear_combination
@@ -29,7 +26,7 @@ else:
 # Hyperparameters of the algorithm and other parameters of the program
 learning_rate_in = 0.1
 learning_rate_var = 0.01
-learning_rate_out = 0.1
+learning_rate_out = 0.01
 gamma = 1  # discount factor
 batch_size = 10
 beta = 1.0
@@ -51,7 +48,10 @@ for rep in range(repetitions):
 
     quantum_model = QuantumModel(qubits=qubits, n_layers=n_layers, observables=observables)
 
-    model = quantum_model.generate_model_policy(n_actions=n_actions, beta=beta, flipped_model=flipped_model)
+    if flipped_model:
+        model = quantum_model.generate_flipped_model_policy(n_actions=n_actions, beta=beta)
+    else:
+        model = quantum_model.generate_model_policy(n_actions=n_actions, beta=beta)
 
     qrl = QRL(savename=file_name, model=model, learning_rates=[learning_rate_in, learning_rate_var, learning_rate_out], gamma=gamma, n_episodes=n_episodes,
               batch_size=batch_size, state_bounds=state_bounds,

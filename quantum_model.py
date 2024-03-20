@@ -71,6 +71,11 @@ class QRL():
             unfinished_ids = [i for i in range(self.batch_size) if not done[i]]
             normalized_states = [s / self.state_bounds for i, s in enumerate(states) if not done[i]]
 
+            if self.n_qubits > 4:
+                for qubit_ind in range(self.n_qubits-4):
+                    for state_ind in range(len(normalized_states)):
+                        normalized_states[state_ind] = np.append(normalized_states[state_ind], normalized_states[state_ind][qubit_ind%4])
+
             for i, state in zip(unfinished_ids, normalized_states):
                 trajectories[i]['states'].append(state)
 
@@ -181,28 +186,24 @@ def main():
     qubits = cirq.GridQubit.rect(1, n_qubits)
 
     if flipped_model:
-        n_layers = 1  # Number of layers in the PQC
-        #ops = [cirq.I(q) for q in qubits]
-        #ops[0], ops[-1] = cirq.Z(qubits[0]), cirq.Z(qubits[-1])
-        #observables = [reduce((lambda x, y: x * y), ops)]  # Z_0*I*I*Z_3
+        n_layers = 1  # Number of variational layers in the PQC
         pauli_strings = get_k_local(k=locality, n_qubits=n_qubits)
         linear_combination = [sum(pauli_strings)]
         observables = linear_combination
-        print(observables)
     else:
         n_layers = 5  # Number of layers in the PQC
         ops = [cirq.Z(q) for q in qubits]
         observables = [reduce((lambda x, y: x * y), ops)]  # Z_0*Z_1*Z_2*Z_3
 
-    n_episodes = 500
-    learning_rates = [0.1, 0.01, 0.1]
+    n_episodes = 2000
+    learning_rates = [0.1, 0.01, 0.01]
     gamma = 1
     beta = 1.0
 
     state_bounds = np.array([2.4, 2.5, 0.21, 2.5])
     batch_size = 10
 
-    breakout = True
+    breakout = False
 
     savename = 'test'
 
@@ -210,7 +211,10 @@ def main():
 
     quantum_model = QuantumModel(qubits=qubits, n_layers=n_layers, observables=observables)
 
-    model = quantum_model.generate_model_policy(n_actions=n_actions, beta=beta, flipped_model=flipped_model)
+    if flipped_model:
+        model = quantum_model.generate_flipped_model_policy(n_actions=n_actions, beta=beta)
+    else:
+        model = quantum_model.generate_model_policy(n_actions=n_actions, beta=beta)
 
     qrl = QRL(savename=savename, model=model, n_qubits=n_qubits, n_layers=n_layers, n_actions=n_actions,
               env_name=env_name, n_episodes=n_episodes, batch_size=batch_size, learning_rates=learning_rates,

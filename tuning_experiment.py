@@ -1,10 +1,40 @@
 from quantum_model import *
 from argparse import ArgumentParser
 
+EXPERIMENTS = [
+    #("in", "var", "out"),
+    (0.5, 0.1, 0.01),
+    (0.5, 0.1, 0.001),
+    (0.5, 0.01, 0.1),
+    (0.5, 0.01, 0.01),
+    (0.5, 0.01, 0.001),
+    (0.5, 0.001, 0.1),
+    (0.5, 0.001, 0.01),
+    (0.5, 0.001, 0.001),
+    (0.1, 0.01, 0.001),
+    (0.1, 0.001, 0.1),
+    (0.1, 0.001, 0.01),
+    (0.1, 0.001, 0.001),
+    (0.01, 0.01, 0.01),
+    (0.01, 0.01, 0.001),
+    (0.01, 0.001, 0.1),
+    (0.01, 0.001, 0.01),
+    (0.01, 0.001, 0.001),
+]
+
+
+#argparser = ArgumentParser()
+#argparser.add_argument("savename", default="lr_in_", nargs="?")
+#argparser.add_argument("--batch_n", type=int)
+#args = argparser.parse_args()
+#savename = args.savename
+savename = 'lr_in_'
+#experiment = EXPERIMENTS[args.batch_n]
+
 env_name = "CartPole-v1"
 flipped_model = True # whether to use the flipped model or the non-flipped model
 # amount of repetitions that will be averaged over for the experiment
-repetitions = 1
+repetitions = 3
 # amount of episodes that will run
 n_episodes = 2000
 n_qubits = 8
@@ -24,9 +54,9 @@ else:
     observables = [reduce((lambda x, y: x * y), ops)]  # Z_0*Z_1*Z_2*Z_3
 
 # Hyperparameters of the algorithm and other parameters of the program
-learning_rate_in = [0.1]
-learning_rate_var = [0.01]
-learning_rate_out = [0.01]
+learning_rate_in = 0.1
+learning_rate_var = 0.001
+learning_rate_out = 0.1
 gamma = 1  # discount factor
 batch_size = 10
 beta = 1.0
@@ -38,39 +68,31 @@ data_names = []
 
 start = time.time()
 
-argparser = ArgumentParser()
-argparser.add_argument("savename", default="lr_in_", nargs="?")
-args = argparser.parse_args()
-savename = args.savename
+for rep in range(repetitions):
+    parameter_savename = str(learning_rate_in) + '-lr_var_' + str(learning_rate_var) + '-lr_out_' + str(learning_rate_out)
+    file_name = savename + parameter_savename + '-repetition_' + str(rep + 1 + 17)
 
-for lr_in in learning_rate_in:
-    for lr_var in learning_rate_var:
-        for lr_out in learning_rate_out:
-            for rep in range(repetitions):
-                parameter_savename = str(lr_in) + '-lr_var_' + str(lr_var) + '-lr_out_' + str(lr_out)
-                file_name = savename + parameter_savename + '-repetition_' + str(rep + 1)
+    quantum_model = QuantumModel(qubits=qubits, n_layers=n_layers, observables=observables)
 
-                quantum_model = QuantumModel(qubits=qubits, n_layers=n_layers, observables=observables)
+    if flipped_model:
+        model = quantum_model.generate_flipped_model_policy(n_actions=n_actions, beta=beta)
+    else:
+        model = quantum_model.generate_model_policy(n_actions=n_actions, beta=beta)
 
-                if flipped_model:
-                    model = quantum_model.generate_flipped_model_policy(n_actions=n_actions, beta=beta)
-                else:
-                    model = quantum_model.generate_model_policy(n_actions=n_actions, beta=beta)
+    qrl = QRL(savename=file_name, model=model, learning_rates=[learning_rate_in, learning_rate_var, learning_rate_out], gamma=gamma, n_episodes=n_episodes,
+              batch_size=batch_size, state_bounds=state_bounds,
+              n_qubits=n_qubits, n_layers=n_layers, n_actions=n_actions, env_name=env_name, breakout=breakout)
 
-                qrl = QRL(savename=file_name, model=model, learning_rates=[lr_in, lr_var, lr_out], gamma=gamma, n_episodes=n_episodes,
-                          batch_size=batch_size, state_bounds=state_bounds,
-                          n_qubits=n_qubits, n_layers=n_layers, n_actions=n_actions, env_name=env_name, breakout=breakout)
+    qrl.main()
 
-                qrl.main()
+    data_names.append(file_name)
 
-                data_names.append(file_name)
+    print('Finished repetition '+str(rep+1)+'/'+str(repetitions))
 
-                print('Finished repetition '+str(rep+1)+'/'+str(repetitions))
+plot_averaged(data_names=data_names, show=False, savename=savename+parameter_savename, smooth=False)
+plot_averaged(data_names=data_names, show=False, savename=savename+parameter_savename+'-smooth', smooth=True)
 
-            plot_averaged(data_names=data_names, show=False, savename=savename+parameter_savename, smooth=False)
-            plot_averaged(data_names=data_names, show=False, savename=savename+parameter_savename+'-smooth', smooth=True)
-
-            data_names = []
+data_names = []
 
 end = time.time()
 

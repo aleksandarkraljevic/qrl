@@ -51,17 +51,17 @@ def main():
     '''
     This function evalutes what the user is interested in evaluating. Each of the following lines can be commented or uncommented depending on what the user exactly wants to evaluate
     '''
-    parameter_names = ['lr_in_0.1-lr_var_0.01-lr_out_0.1', 'lr_in_0.1-lr_var_0.01-lr_out_0.01', 'lr_in_0.1-lr_var_0.01-lr_out_0.001']
-    label_names = ['w=0.1', 'w=0.01', 'w=0.001']
-    parameter_name = 'lr_in_0.1-lr_var_0.01-lr_out_0.01'
+    parameter_names = ['lr_in_0.1-lr_var_0.001-lr_out_0.001', 'test']
+    label_names = ['Flipped', 'Non-Flipped']
+    parameter_name = 'lr_in_0.1-lr_var_0.001-lr_out_0.1'
 
     #plot(data_name='test-repetition_9', show=True, savename='test', smooth=False)
 
-    plot_comparison(parameter_names=parameter_names, repetitions=20, show=True, savename='lr_in_0.1-lr_var_0.01', label_names=label_names)
+    #plot_comparison(parameter_names=parameter_names, repetitions=20, show=True, savename='compare-8_qubit-6_layer_flipped-vs-4_qubit-5_layer_non_flipped', label_names=label_names)
 
     #plot_experiment(parameter_name, 20, True, True)
 
-    #compare_training_steps(parameter_names=parameter_names, repetitions=20, convergence_points=[500, 1500])
+    compare_training_steps(parameter_names=parameter_names, repetitions=20, convergence_points=[1500, 750])
 
 
 if __name__ == '__main__':

@@ -11,7 +11,7 @@ from collections import deque, defaultdict
 tf.get_logger().setLevel('ERROR')
 
 class QRL():
-    def __init__(self, savename, locality, n_qubits, n_actions, env_name, n_episodes, batch_size, learning_rates, gamma, state_bounds, breakout):
+    def __init__(self, savename, locality, n_qubits, n_actions, env_name, n_episodes, batch_size, learning_rates, gamma, beta, state_bounds, breakout):
         '''
         Initializes the QRL parameters.
 
@@ -32,7 +32,9 @@ class QRL():
         learning_rates (list):
             A list of three learning rates that the optimizers within the PQC use in order to update the encoding, variational, and rescaling weights.
         gamma (float):
-            The discount factor that is used in the Q-learning algorithm.
+            The discount factor that is used in the RL algorithm.
+        beta (float):
+            The inverse temperature that represents the amount of exploration within the algorithm.
         state_bounds (array):
             An array containing four float values that represent the bounds on the cartpole states.
         breakout (boolean):
@@ -40,6 +42,7 @@ class QRL():
         '''
         self.savename = savename
         self.gamma = gamma
+        self.beta = beta
         self.n_episodes = n_episodes
         self.batch_size = batch_size
         self.state_bounds = state_bounds
@@ -76,19 +79,19 @@ class QRL():
 
             # Compute policy for all unfinished envs
 
+            states = tf.convert_to_tensor(normalized_states)
             action_probs = []
 
-            for state in normalized_states:
-                action_prob = self.GTP(state, self.coeff.numpy()[0][0], self.coeff.numpy()[0][1:len(self.omegas)+1], self.coeff.numpy()[0][len(self.omegas)+1:])
-                action_prob *= self.w.numpy()
+            for state in states:
+                action_prob = self.GTP(state, self.coeff[0][0], self.coeff[0][1:len(self.omegas)+1], self.coeff[0][len(self.omegas)+1:])
+                action_prob *= self.w
+                action_prob = np.exp(self.beta*action_prob)/np.sum(np.exp(self.beta*action_prob)) # apply softmax
                 action_probs.append(action_prob)
 
             # Store action and transition all environments to the next state
             states = [None for i in range(self.batch_size)]
             for i, policy in zip(unfinished_ids, action_probs):
                 action = np.random.choice(self.n_actions, p=policy)
-                print(action)
-                exit()
                 states[i], reward, done[i], _ = envs[i].step(action)
                 trajectories[i]['actions'].append(action)
                 trajectories[i]['rewards'].append(reward)
@@ -127,18 +130,21 @@ class QRL():
         states = tf.convert_to_tensor(states)
         actions = tf.convert_to_tensor(actions)
         returns = tf.convert_to_tensor(returns)
+        logits = []
 
         with tf.GradientTape() as tape:
-            print([self.w, self.coeff])
-            exit()
-            tape.watch([self.w, self.coeff])
-            logits = self.model(states)
+            tape.watch([self.coeff, self.w])
+            for state in states:
+                logit = self.GTP(state, self.coeff[0][0], self.coeff[0][1:len(self.omegas)+1], self.coeff[0][len(self.omegas)+1:])
+                logit *= self.w
+                logit = np.exp(self.beta * logit) / np.sum(np.exp(self.beta * logit))  # apply softmax
+                logits.append(logit)
             p_actions = tf.gather_nd(logits, actions)
             log_probs = tf.math.log(p_actions)
             loss = tf.math.reduce_sum(-log_probs * returns) / self.batch_size
-        grads = tape.gradient(loss, self.model.trainable_variables)
-        for optimizer, w in zip([self.optimizer_coeff, self.optimizer_out], [self.w_coeff, self.w_out]):
-            optimizer.apply_gradients([(grads[w], self.model.trainable_variables[w])])
+        grads = tape.gradient(loss, [self.coeff, self.w])
+        for optimizer, w in zip([self.optimizer_coeff, self.optimizer_out], [self.coeff, self.w_out]):
+            optimizer.apply_gradients([(grads[w], [self.coeff, self.w][w])])
 
     def save_data(self, rewards):
         '''
@@ -163,7 +169,7 @@ class QRL():
         observables = linear_combination
 
         self.w = tf.Variable(
-            initial_value=tf.constant([.5, .5]), dtype="float32",
+            initial_value=tf.constant([1., -1.]), dtype="float32",
             trainable=True, name="obs-weights")
         coeff_init = tf.random_uniform_initializer(minval=0.0, maxval=1.0)
         self.coeff = tf.Variable(
@@ -233,7 +239,7 @@ def main():
 
     qrl = QRL(savename=savename, locality=locality, n_qubits=n_qubits, n_actions=n_actions,
               env_name=env_name, n_episodes=n_episodes, batch_size=batch_size, learning_rates=learning_rates,
-              gamma=gamma, state_bounds=state_bounds, breakout=breakout)
+              gamma=gamma, beta=beta, state_bounds=state_bounds, breakout=breakout)
 
     qrl.main()
 

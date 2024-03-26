@@ -3,38 +3,36 @@ from argparse import ArgumentParser
 
 EXPERIMENTS = [
     #("in", "var", "out"),
-    (0.5, 0.1, 0.01),
-    (0.5, 0.1, 0.001),
-    (0.5, 0.01, 0.1),
-    (0.5, 0.01, 0.01),
-    (0.5, 0.01, 0.001),
-    (0.5, 0.001, 0.1),
-    (0.5, 0.001, 0.01),
-    (0.5, 0.001, 0.001),
-    (0.1, 0.01, 0.001),
-    (0.1, 0.001, 0.1),
-    (0.1, 0.001, 0.01),
-    (0.1, 0.001, 0.001),
-    (0.01, 0.01, 0.01),
-    (0.01, 0.01, 0.001),
-    (0.01, 0.001, 0.1),
-    (0.01, 0.001, 0.01),
-    (0.01, 0.001, 0.001),
+    (0.5, 0.001, 0.0001),
+    (0.5, 0.0001, 0.1),
+    (0.5, 0.0001, 0.01),
+    (0.5, 0.0001, 0.001),
+    (0.5, 0.0001, 0.0001),
+    (0.1, 0.001, 0.0001),
+    (0.1, 0.0001, 0.1),
+    (0.1, 0.0001, 0.01),
+    (0.1, 0.0001, 0.001),
+    (0.1, 0.0001, 0.0001),
+    (0.01, 0.001, 0.0001),
+    (0.01, 0.0001, 0.1),
+    (0.01, 0.0001, 0.01),
+    (0.01, 0.0001, 0.001),
+    (0.01, 0.0001, 0.0001),
 ]
 
 
-#argparser = ArgumentParser()
+argparser = ArgumentParser()
 #argparser.add_argument("savename", default="lr_in_", nargs="?")
-#argparser.add_argument("--batch_n", type=int)
-#args = argparser.parse_args()
+argparser.add_argument("--batch_n", type=int)
+args = argparser.parse_args()
 #savename = args.savename
 savename = 'lr_in_'
-#experiment = EXPERIMENTS[args.batch_n]
+experiment = EXPERIMENTS[args.batch_n]
 
 env_name = "CartPole-v1"
 flipped_model = True # whether to use the flipped model or the non-flipped model
 # amount of repetitions that will be averaged over for the experiment
-repetitions = 3
+repetitions = 20
 # amount of episodes that will run
 n_episodes = 2000
 n_qubits = 8
@@ -54,9 +52,9 @@ else:
     observables = [reduce((lambda x, y: x * y), ops)]  # Z_0*Z_1*Z_2*Z_3
 
 # Hyperparameters of the algorithm and other parameters of the program
-learning_rate_in = 0.1
-learning_rate_var = 0.001
-learning_rate_out = 0.1
+learning_rate_in = experiment[0]
+learning_rate_var = experiment[1]
+learning_rate_out = experiment[2]
 gamma = 1  # discount factor
 batch_size = 10
 beta = 1.0
@@ -70,7 +68,7 @@ start = time.time()
 
 for rep in range(repetitions):
     parameter_savename = str(learning_rate_in) + '-lr_var_' + str(learning_rate_var) + '-lr_out_' + str(learning_rate_out)
-    file_name = savename + parameter_savename + '-repetition_' + str(rep + 1 + 17)
+    file_name = savename + parameter_savename + '-repetition_' + str(rep + 1)
 
     quantum_model = QuantumModel(qubits=qubits, n_layers=n_layers, observables=observables)
 

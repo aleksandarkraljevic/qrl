@@ -162,4 +162,4 @@ def compare_training_steps(parameter_names, repetitions, convergence_points):
             rewards = np.vstack((rewards, new_rewards))
         mean_rewards = np.mean(rewards, axis=0)
 
-        print('Number of training steps until convergence for "'+str(parameter_names[experiment])+'":', round(np.sum(mean_rewards[::convergence_points[experiment]])))
+        print('Number of training steps until convergence for "'+str(parameter_names[experiment])+'":', round(np.sum(mean_rewards[:convergence_points[experiment]])))

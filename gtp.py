@@ -52,9 +52,9 @@ class QRL():
         self.breakout = breakout
         self.locality = locality
         self.optimizer_coeff = tf.keras.optimizers.Adam(learning_rate=learning_rates[0], amsgrad=True)
-        self.optimizer_out = tf.keras.optimizers.Adam(learning_rate=learning_rates[1], amsgrad=True)
+        self.optimizer_w = tf.keras.optimizers.Adam(learning_rate=learning_rates[1], amsgrad=True)
         # Indexes of the weights for each of the parts of the circuit
-        self.coeff, self.w_out = 0, 1
+        self.coeff_ind, self.w_ind = 0, 1
 
     def gather_episodes(self):
         """Interact with environment in batched fashion."""
@@ -80,17 +80,16 @@ class QRL():
             # Compute policy for all unfinished envs
 
             states = tf.convert_to_tensor(normalized_states)
+            states = tf.cast(states, tf.float32)
             action_probs = []
 
-            for state in states:
-                action_prob = self.GTP(state, self.coeff[0][0], self.coeff[0][1:len(self.omegas)+1], self.coeff[0][len(self.omegas)+1:])
-                action_prob *= self.w
-                action_prob = np.exp(self.beta*action_prob)/np.sum(np.exp(self.beta*action_prob)) # apply softmax
-                action_probs.append(action_prob)
+            action_probs = self.GTP(states, self.coeff[0][0], self.coeff[0][1:len(self.omegas)+1], self.coeff[0][len(self.omegas)+1:])
+            action_probs = tf.tensordot(action_probs, self.w, axes=0)
+            action_probs = tf.math.exp(self.beta * action_probs) / tf.reshape(tf.reduce_sum(tf.math.exp(self.beta * action_probs), axis=1), [len(states),1])  # apply softmax
 
             # Store action and transition all environments to the next state
             states = [None for i in range(self.batch_size)]
-            for i, policy in zip(unfinished_ids, action_probs):
+            for i, policy in zip(unfinished_ids, action_probs.numpy()):
                 action = np.random.choice(self.n_actions, p=policy)
                 states[i], reward, done[i], _ = envs[i].step(action)
                 trajectories[i]['actions'].append(action)
@@ -113,37 +112,37 @@ class QRL():
 
         return returns
 
-    def GTP(self, state, c_zero, a_w, b_w):
+    def GTP(self, states, c_zero, a_w, b_w):
         # states is the input, omegas are the frequency combinations, c_0, a_w and b_w are the trainable variables.
         # c_0 is the coefficient for the all 0 frequency, a_w is the real part of the c_w coefficient, b_w is the imaginary part of the c_w coefficient
         # this function only works correctly if each qubit only has 1 Pauli rotation as its encoding gate
+        all_elements = [c_zero] * len(states)
+        all_elements = tf.reshape(all_elements, [len(states), 1])
 
-        all_elements = []
-        all_elements.append(c_zero)
-        for i in range(len(self.omegas) - 1):
-            element = 2 * a_w[i] * np.cos(np.dot(self.omegas[i], state)) - 2 * b_w[i] * np.sin(np.dot(self.omegas[i], state))
-            all_elements.append(element)
-        return np.sum(all_elements)
+        for i in range(len(self.omegas)):
+            element = 2 * a_w[i] * tf.math.cos(tf.tensordot(self.omegas[i], states, axes=[[0], [1]])) - 2 * b_w[i] * tf.math.sin(tf.tensordot(self.omegas[i], states, axes=[[0], [1]]))
+            element = tf.reshape(element, [len(states), 1])
+            all_elements = tf.concat([all_elements, element], 1)
+
+        return tf.reduce_sum(all_elements, axis=1)
 
     @tf.function
     def reinforce_update(self, states, actions, returns):
         states = tf.convert_to_tensor(states)
+        states = tf.cast(states, tf.float32)
         actions = tf.convert_to_tensor(actions)
         returns = tf.convert_to_tensor(returns)
-        logits = []
 
         with tf.GradientTape() as tape:
             tape.watch([self.coeff, self.w])
-            for state in states:
-                logit = self.GTP(state, self.coeff[0][0], self.coeff[0][1:len(self.omegas)+1], self.coeff[0][len(self.omegas)+1:])
-                logit *= self.w
-                logit = np.exp(self.beta * logit) / np.sum(np.exp(self.beta * logit))  # apply softmax
-                logits.append(logit)
+            logits = self.GTP(states, self.coeff[0][0], self.coeff[0][1:len(self.omegas)+1], self.coeff[0][len(self.omegas)+1:])
+            logits = tf.tensordot(logits, self.w, axes=0)
+            logits = tf.math.exp(self.beta * logits) / tf.reshape(tf.reduce_sum(tf.math.exp(self.beta * logits), axis=1), [len(states), 1])  # apply softmax
             p_actions = tf.gather_nd(logits, actions)
             log_probs = tf.math.log(p_actions)
             loss = tf.math.reduce_sum(-log_probs * returns) / self.batch_size
         grads = tape.gradient(loss, [self.coeff, self.w])
-        for optimizer, w in zip([self.optimizer_coeff, self.optimizer_out], [self.coeff, self.w_out]):
+        for optimizer, w in zip([self.optimizer_coeff, self.optimizer_w], [self.coeff_ind, self.w_ind]):
             optimizer.apply_gradients([(grads[w], [self.coeff, self.w][w])])
 
     def save_data(self, rewards):
@@ -163,6 +162,8 @@ class QRL():
         omegas = itertools.product([-1, 0, 1], repeat=self.n_qubits)
         omegas = list(omegas)
         self.omegas = omegas[:int(np.floor((len(omegas) / 2)))]  # get all the frequencies that are unique with regards to the combination, regardless of vector sign, and not counting the all zero
+        self.omegas = tf.convert_to_tensor(self.omegas)
+        self.omegas = tf.cast(self.omegas, tf.float32)
 
         pauli_strings = get_k_local(k=self.locality, n_qubits=self.n_qubits)
         linear_combination = [sum(pauli_strings)]
@@ -174,8 +175,20 @@ class QRL():
         coeff_init = tf.random_uniform_initializer(minval=0.0, maxval=1.0)
         self.coeff = tf.Variable(
             initial_value=coeff_init(shape=(1, len(self.omegas)*2+1), dtype="float32"),
-            trainable=True, name="coefficients", constraint= lambda x: (x * len(pauli_strings)) / np.sqrt(x.dot(x))
-        )
+            trainable=True, name="coefficients")
+
+        # normalize the coefficients based on boundary conditions
+        coeff_array = self.coeff.numpy()
+        c_zero_norm = np.sqrt(coeff_array[0][0] ** 2)
+        a_w_b_w_norm = np.sqrt(coeff_array[0][1:len(self.omegas) + 1] ** 2 + coeff_array[0][len(self.omegas) + 1:] ** 2)
+        a_w_b_w_norm = np.concatenate(([c_zero_norm], a_w_b_w_norm, a_w_b_w_norm))
+        a_w_b_w_norm = tf.convert_to_tensor(a_w_b_w_norm, dtype=tf.float32)
+        # self.coeff = tf.math.scalar_mul(len(pauli_strings), self.coeff) # This bound B makes the softmax explode, python can't handle it
+        print(self.coeff)
+        self.coeff = self.coeff / a_w_b_w_norm
+        print(self.coeff)
+        exit()
+
 
         # Start training the agent
         episode_reward_history = []
@@ -195,6 +208,8 @@ class QRL():
 
             # Update model parameters.
             self.reinforce_update(states, id_action_pairs, returns)
+
+            ### Insert normalization of self.coeff ###
 
             # Store collected rewards
             for ep_rwds in rewards:
@@ -223,8 +238,8 @@ def main():
     locality = 3 # the k-locality of the observables
     qubits = cirq.GridQubit.rect(1, n_qubits)
 
-    n_episodes = 500
-    learning_rates = [0.01, 0.01, 0.01, 0.01]
+    n_episodes = 2000
+    learning_rates = [0.01, 0.01]
     gamma = 1
     beta = 1.0
 

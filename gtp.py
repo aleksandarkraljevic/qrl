@@ -10,10 +10,10 @@ import itertools
 from collections import deque, defaultdict
 tf.get_logger().setLevel('ERROR')
 
-class QRL():
+class GTP_QRL():
     def __init__(self, savename, locality, n_qubits, n_actions, env_name, n_episodes, batch_size, learning_rates, gamma, beta, state_bounds, breakout):
         '''
-        Initializes the QRL parameters.
+        Initializes the GTP_QRL parameters.
 
         Parameters
         ----------
@@ -126,6 +126,18 @@ class QRL():
 
         return tf.reduce_sum(all_elements, axis=1)
 
+    def normalize_coeff(self, pauli_strings):
+        # normalizes the coefficients based on boundary conditions
+        coeff_array = self.coeff.numpy()[0]
+        c_zero_norm = np.sqrt(coeff_array[0] ** 2)
+        a_w_b_w_norm = np.sqrt(coeff_array[1:len(self.omegas) + 1] ** 2 + coeff_array[len(self.omegas) + 1:] ** 2)
+        a_w_b_w_norm = np.concatenate(([c_zero_norm], a_w_b_w_norm, a_w_b_w_norm))
+        a_w_b_w_norm = tf.convert_to_tensor(a_w_b_w_norm, dtype=tf.float32)
+        # coeff_array = len(pauli_strings) * coeff_array # This bound B makes the softmax explode, python can't handle it
+        coeff_array = coeff_array / a_w_b_w_norm
+        coeff_array = tf.reshape(coeff_array, [1, len(coeff_array)])
+        self.coeff.assign(coeff_array)
+
     @tf.function
     def reinforce_update(self, states, actions, returns):
         states = tf.convert_to_tensor(states)
@@ -167,28 +179,17 @@ class QRL():
 
         pauli_strings = get_k_local(k=self.locality, n_qubits=self.n_qubits)
         linear_combination = [sum(pauli_strings)]
-        observables = linear_combination
 
         self.w = tf.Variable(
             initial_value=tf.constant([1., -1.]), dtype="float32",
             trainable=True, name="obs-weights")
-        coeff_init = tf.random_uniform_initializer(minval=0.0, maxval=1.0)
+        coeff_init = tf.random_uniform_initializer(minval=-1.0, maxval=1.0)
         self.coeff = tf.Variable(
             initial_value=coeff_init(shape=(1, len(self.omegas)*2+1), dtype="float32"),
             trainable=True, name="coefficients")
 
-        # normalize the coefficients based on boundary conditions
-        coeff_array = self.coeff.numpy()
-        c_zero_norm = np.sqrt(coeff_array[0][0] ** 2)
-        a_w_b_w_norm = np.sqrt(coeff_array[0][1:len(self.omegas) + 1] ** 2 + coeff_array[0][len(self.omegas) + 1:] ** 2)
-        a_w_b_w_norm = np.concatenate(([c_zero_norm], a_w_b_w_norm, a_w_b_w_norm))
-        a_w_b_w_norm = tf.convert_to_tensor(a_w_b_w_norm, dtype=tf.float32)
-        # self.coeff = tf.math.scalar_mul(len(pauli_strings), self.coeff) # This bound B makes the softmax explode, python can't handle it
-        print(self.coeff)
-        self.coeff = self.coeff / a_w_b_w_norm
-        print(self.coeff)
-        exit()
-
+        # normalizes the coefficients based on boundary conditions
+        self.normalize_coeff(pauli_strings)
 
         # Start training the agent
         episode_reward_history = []
@@ -209,7 +210,8 @@ class QRL():
             # Update model parameters.
             self.reinforce_update(states, id_action_pairs, returns)
 
-            ### Insert normalization of self.coeff ###
+            # normalizes the coefficients based on boundary conditions
+            self.normalize_coeff(pauli_strings)
 
             # Store collected rewards
             for ep_rwds in rewards:
@@ -229,14 +231,13 @@ class QRL():
 
 def main():
     '''
-    Initializes all the hyperparameters, creates the base and target network by calling upon dnn.py, and trains and saves the model by calling upon the QRL() class.
+    Initializes all the hyperparameters, creates the base and target network by calling upon dnn.py, and trains and saves the model by calling upon the GTP_QRL() class.
     '''
     env_name = "CartPole-v1"
 
     n_qubits = 4  # Dimension of the state vectors in CartPole
     n_actions = 2  # Number of actions in CartPole
     locality = 3 # the k-locality of the observables
-    qubits = cirq.GridQubit.rect(1, n_qubits)
 
     n_episodes = 2000
     learning_rates = [0.01, 0.01]
@@ -252,7 +253,7 @@ def main():
 
     start = time.time()
 
-    qrl = QRL(savename=savename, locality=locality, n_qubits=n_qubits, n_actions=n_actions,
+    qrl = GTP_QRL(savename=savename, locality=locality, n_qubits=n_qubits, n_actions=n_actions,
               env_name=env_name, n_episodes=n_episodes, batch_size=batch_size, learning_rates=learning_rates,
               gamma=gamma, beta=beta, state_bounds=state_bounds, breakout=breakout)
 

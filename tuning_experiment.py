@@ -2,22 +2,9 @@ from quantum_model import *
 from argparse import ArgumentParser
 
 EXPERIMENTS = [
-    #("in", "var", "out"),
-    (0.5, 0.001, 0.0001),
-    (0.5, 0.0001, 0.1),
-    (0.5, 0.0001, 0.01),
-    (0.5, 0.0001, 0.001),
-    (0.5, 0.0001, 0.0001),
-    (0.1, 0.001, 0.0001),
-    (0.1, 0.0001, 0.1),
-    (0.1, 0.0001, 0.01),
-    (0.1, 0.0001, 0.001),
-    (0.1, 0.0001, 0.0001),
-    (0.01, 0.001, 0.0001),
-    (0.01, 0.0001, 0.1),
-    (0.01, 0.0001, 0.01),
-    (0.01, 0.0001, 0.001),
-    (0.01, 0.0001, 0.0001),
+    #("beta"),
+    0.1,
+    10.
 ]
 
 
@@ -26,7 +13,7 @@ argparser = ArgumentParser()
 argparser.add_argument("--batch_n", type=int)
 args = argparser.parse_args()
 #savename = args.savename
-savename = 'lr_in_'
+savename = 'beta_'
 experiment = EXPERIMENTS[args.batch_n]
 
 env_name = "CartPole-v1"
@@ -52,12 +39,12 @@ else:
     observables = [reduce((lambda x, y: x * y), ops)]  # Z_0*Z_1*Z_2*Z_3
 
 # Hyperparameters of the algorithm and other parameters of the program
-learning_rate_in = experiment[0]
-learning_rate_var = experiment[1]
-learning_rate_out = experiment[2]
+learning_rate_in = 0.1
+learning_rate_var = 0.001
+learning_rate_out = 0.0001
 gamma = 1  # discount factor
 batch_size = 10
-beta = 1.0
+beta = experiment
 state_bounds = np.array([2.4, 2.5, 0.21, 2.5])
 
 breakout = False
@@ -67,7 +54,7 @@ data_names = []
 start = time.time()
 
 for rep in range(repetitions):
-    parameter_savename = str(learning_rate_in) + '-lr_var_' + str(learning_rate_var) + '-lr_out_' + str(learning_rate_out)
+    parameter_savename = str(beta)
     file_name = savename + parameter_savename + '-repetition_' + str(rep + 1)
 
     quantum_model = QuantumModel(qubits=qubits, n_layers=n_layers, observables=observables)

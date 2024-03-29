@@ -121,7 +121,7 @@ def compare_models(parameter_names, repetitions, show, savename, label_names, sm
 
         plot = sns.lineplot(data=dataframe, x='Episode', y='Reward', label=label_names[experiment])
         plt.fill_between(episodes, lower_bound, upper_bound, color=colors_list[experiment], alpha=0.1)
-        sns.move_legend(plot, "upper left")
+        sns.move_legend(plot, "lower right")
 
     plt.title('Mean reward per episode')
     if savename != False:

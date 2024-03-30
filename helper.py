@@ -1,9 +1,9 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
+import numpy as np
+import cirq
 from scipy.signal import savgol_filter
-from functools import reduce
-from pqc import *
 
 def plot(data_name, show, savename, smooth):
     '''

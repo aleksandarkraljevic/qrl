@@ -3,11 +3,12 @@ importlib.reload(pkg_resources)
 
 from helper import *
 
-import gym, cirq, sympy
+import gym
 import time
 import numpy as np
 import itertools
-from collections import deque, defaultdict
+import tensorflow as tf
+from collections import defaultdict
 tf.get_logger().setLevel('ERROR')
 
 class GTP_QRL():
@@ -81,11 +82,10 @@ class GTP_QRL():
 
             states = tf.convert_to_tensor(normalized_states)
             states = tf.cast(states, tf.float32)
-            action_probs = []
 
-            action_probs = self.GTP(states, self.coeff[0][0], self.coeff[0][1:len(self.omegas)+1], self.coeff[0][len(self.omegas)+1:])
-            action_probs = tf.tensordot(action_probs, self.w, axes=0)
-            action_probs = tf.math.exp(self.beta * action_probs) / tf.reshape(tf.reduce_sum(tf.math.exp(self.beta * action_probs), axis=1), [len(states),1])  # apply softmax
+            action_values = self.GTP(states, self.coeff[0][0], self.coeff[0][1:len(self.omegas)+1], self.coeff[0][len(self.omegas)+1:])
+            action_values = tf.tensordot(action_values, self.w, axes=0)
+            action_probs = self.softmax(action_values)
 
             # Store action and transition all environments to the next state
             states = [None for i in range(self.batch_size)]
@@ -112,6 +112,16 @@ class GTP_QRL():
 
         return returns
 
+    def softmax(self, actions_values):
+        maximums = tf.math.maximum(actions_values[:, 0], actions_values[:, 1])
+        action_one = tf.reshape(actions_values[:, 0] - maximums, [len(maximums), 1])
+        action_two = tf.reshape(actions_values[:, 1] - maximums, [len(maximums), 1])
+        actions_values = tf.concat([action_one, action_two], axis=1)
+        action_probs = tf.math.exp(self.beta * actions_values) / tf.reshape(tf.reduce_sum(tf.math.exp(self.beta * actions_values), axis=1),
+                                                           [len(actions_values), 1])
+
+        return action_probs
+
     def GTP(self, states, c_zero, a_w, b_w):
         # states is the input, omegas are the frequency combinations, c_0, a_w and b_w are the trainable variables.
         # c_0 is the coefficient for the all 0 frequency, a_w is the real part of the c_w coefficient, b_w is the imaginary part of the c_w coefficient
@@ -133,7 +143,7 @@ class GTP_QRL():
         a_w_b_w_norm = np.sqrt(coeff_array[1:len(self.omegas) + 1] ** 2 + coeff_array[len(self.omegas) + 1:] ** 2)
         a_w_b_w_norm = np.concatenate(([c_zero_norm], a_w_b_w_norm, a_w_b_w_norm))
         a_w_b_w_norm = tf.convert_to_tensor(a_w_b_w_norm, dtype=tf.float32)
-        # coeff_array = len(pauli_strings) * coeff_array # This bound B makes the softmax explode, python can't handle it
+        coeff_array = len(pauli_strings) * coeff_array # This bound B makes the softmax explode, python can't handle it
         coeff_array = coeff_array / a_w_b_w_norm
         coeff_array = tf.reshape(coeff_array, [1, len(coeff_array)])
         self.coeff.assign(coeff_array)
@@ -149,7 +159,7 @@ class GTP_QRL():
             tape.watch([self.coeff, self.w])
             logits = self.GTP(states, self.coeff[0][0], self.coeff[0][1:len(self.omegas)+1], self.coeff[0][len(self.omegas)+1:])
             logits = tf.tensordot(logits, self.w, axes=0)
-            logits = tf.math.exp(self.beta * logits) / tf.reshape(tf.reduce_sum(tf.math.exp(self.beta * logits), axis=1), [len(states), 1])  # apply softmax
+            logits = self.softmax(logits)
             p_actions = tf.gather_nd(logits, actions)
             log_probs = tf.math.log(p_actions)
             loss = tf.math.reduce_sum(-log_probs * returns) / self.batch_size
@@ -178,7 +188,6 @@ class GTP_QRL():
         self.omegas = tf.cast(self.omegas, tf.float32)
 
         pauli_strings = get_k_local(k=self.locality, n_qubits=self.n_qubits)
-        linear_combination = [sum(pauli_strings)]
 
         self.w = tf.Variable(
             initial_value=tf.constant([1., -1.]), dtype="float32",
@@ -240,7 +249,7 @@ def main():
     locality = 3 # the k-locality of the observables
 
     n_episodes = 2000
-    learning_rates = [0.01, 0.01]
+    learning_rates = [0.5, 0.5]
     gamma = 1
     beta = 1.0
 

@@ -48,7 +48,7 @@ learning_rate_coeff = experiment[0]
 learning_rate_out = experiment[1]
 gamma = 1  # discount factor
 batch_size = 10
-beta = experiment
+beta = 1.0
 state_bounds = np.array([2.4, 2.5, 0.21, 2.5])
 
 breakout = False
@@ -61,7 +61,7 @@ for rep in range(repetitions):
     parameter_savename = str(learning_rate_coeff) + '-lr_out_' + str(learning_rate_out)
     file_name = savename + parameter_savename + '-repetition_' + str(rep + 1)
 
-    qrl = GTP_QRL(savename=savename, locality=locality, n_qubits=n_qubits, n_actions=n_actions,
+    qrl = GTP_QRL(savename=file_name, locality=locality, n_qubits=n_qubits, n_actions=n_actions,
                   env_name=env_name, n_episodes=n_episodes, batch_size=batch_size, learning_rates=[learning_rate_coeff, learning_rate_out],
                   gamma=gamma, beta=beta, state_bounds=state_bounds, breakout=breakout)
 

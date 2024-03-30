@@ -3,10 +3,11 @@ importlib.reload(pkg_resources)
 
 from helper import *
 
-import gym, cirq, sympy
+import gym
 import time
-import numpy as np
-from collections import deque, defaultdict
+from pqc import *
+from collections import defaultdict
+from functools import reduce
 tf.get_logger().setLevel('ERROR')
 
 class QRL():

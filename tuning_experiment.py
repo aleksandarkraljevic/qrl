@@ -2,9 +2,34 @@ from quantum_model import *
 from argparse import ArgumentParser
 
 EXPERIMENTS = [
-    #("beta"),
-    0.1,
-    10.
+    #("lr_in", "lr_var", "lr_out"),
+    (0.5, 0.1, 0.1),
+    (0.5, 0.1, 0.01),
+    (0.5, 0.1, 0.001),
+    (0.5, 0.01, 0.1),
+    (0.5, 0.01, 0.01),
+    (0.5, 0.01, 0.001),
+    (0.5, 0.001, 0.1),
+    (0.5, 0.001, 0.01),
+    (0.5, 0.001, 0.001),
+    (0.1, 0.1, 0.1),
+    (0.1, 0.1, 0.01),
+    (0.1, 0.1, 0.001),
+    (0.1, 0.01, 0.1),
+    (0.1, 0.01, 0.01),
+    (0.1, 0.01, 0.001),
+    (0.1, 0.001, 0.1),
+    (0.1, 0.001, 0.01),
+    (0.1, 0.001, 0.001),
+    (0.01, 0.1, 0.1),
+    (0.01, 0.1, 0.01),
+    (0.01, 0.1, 0.001),
+    (0.01, 0.01, 0.1),
+    (0.01, 0.01, 0.01),
+    (0.01, 0.01, 0.001),
+    (0.01, 0.001, 0.1),
+    (0.01, 0.001, 0.01),
+    (0.01, 0.001, 0.001),
 ]
 
 
@@ -13,7 +38,7 @@ argparser = ArgumentParser()
 argparser.add_argument("--batch_n", type=int)
 args = argparser.parse_args()
 #savename = args.savename
-savename = 'beta_'
+savename = 'lr_in_'
 experiment = EXPERIMENTS[args.batch_n]
 
 env_name = "CartPole-v1"
@@ -29,7 +54,7 @@ locality = 3 # the k-locality of the observables
 qubits = cirq.GridQubit.rect(1, n_qubits)
 
 if flipped_model:
-    n_layers = 6  # Number of variational layers in the PQC
+    n_layers = 1  # Number of variational layers in the PQC
     pauli_strings = get_k_local(k=locality, n_qubits=n_qubits)
     linear_combination = [sum(pauli_strings)]
     observables = linear_combination
@@ -39,12 +64,12 @@ else:
     observables = [reduce((lambda x, y: x * y), ops)]  # Z_0*Z_1*Z_2*Z_3
 
 # Hyperparameters of the algorithm and other parameters of the program
-learning_rate_in = 0.1
-learning_rate_var = 0.001
-learning_rate_out = 0.0001
+learning_rate_in = experiment[0]
+learning_rate_var = experiment[1]
+learning_rate_out = experiment[2]
 gamma = 1  # discount factor
 batch_size = 10
-beta = experiment
+beta = 1.0
 state_bounds = np.array([2.4, 2.5, 0.21, 2.5])
 
 breakout = False
@@ -54,7 +79,7 @@ data_names = []
 start = time.time()
 
 for rep in range(repetitions):
-    parameter_savename = str(beta)
+    parameter_savename = str(learning_rate_in) + '-lr_var_' + str(learning_rate_var) + '-lr_out_' + str(learning_rate_out)
     file_name = savename + parameter_savename + '-repetition_' + str(rep + 1)
 
     quantum_model = QuantumModel(qubits=qubits, n_layers=n_layers, observables=observables)

@@ -79,12 +79,11 @@ class GTP_QRL():
                 trajectories[i]['states'].append(state)
 
             # Compute policy for all unfinished envs
-
             states = tf.convert_to_tensor(normalized_states)
             states = tf.cast(states, tf.float32)
 
             action_values = self.GTP(states, self.coeff[0][0], self.coeff[0][1:len(self.omegas)+1], self.coeff[0][len(self.omegas)+1:])
-            action_values = tf.tensordot(action_values, self.w, axes=0)
+            action_values = tf.reshape(tf.tensordot(action_values, self.w, axes=0), [len(action_values), 2])
             action_probs = self.softmax(action_values)
 
             # Store action and transition all environments to the next state
@@ -143,7 +142,7 @@ class GTP_QRL():
         a_w_b_w_norm = np.sqrt(coeff_array[1:len(self.omegas) + 1] ** 2 + coeff_array[len(self.omegas) + 1:] ** 2)
         a_w_b_w_norm = np.concatenate(([c_zero_norm], a_w_b_w_norm, a_w_b_w_norm))
         a_w_b_w_norm = tf.convert_to_tensor(a_w_b_w_norm, dtype=tf.float32)
-        coeff_array = len(pauli_strings) * coeff_array # This bound B makes the softmax explode, python can't handle it
+        #coeff_array = len(pauli_strings) * coeff_array # Screws with the action probabilities / makes it difficult to escape only choosing one action
         coeff_array = coeff_array / a_w_b_w_norm
         coeff_array = tf.reshape(coeff_array, [1, len(coeff_array)])
         self.coeff.assign(coeff_array)
@@ -156,16 +155,16 @@ class GTP_QRL():
         returns = tf.convert_to_tensor(returns)
 
         with tf.GradientTape() as tape:
-            tape.watch([self.coeff, self.w])
+            tape.watch(self.trainable_variables)
             logits = self.GTP(states, self.coeff[0][0], self.coeff[0][1:len(self.omegas)+1], self.coeff[0][len(self.omegas)+1:])
-            logits = tf.tensordot(logits, self.w, axes=0)
+            logits = tf.reshape(tf.tensordot(logits, self.w, axes=0), [len(actions), 2])
             logits = self.softmax(logits)
             p_actions = tf.gather_nd(logits, actions)
             log_probs = tf.math.log(p_actions)
             loss = tf.math.reduce_sum(-log_probs * returns) / self.batch_size
-        grads = tape.gradient(loss, [self.coeff, self.w])
+        grads = tape.gradient(loss, self.trainable_variables)
         for optimizer, w in zip([self.optimizer_coeff, self.optimizer_w], [self.coeff_ind, self.w_ind]):
-            optimizer.apply_gradients([(grads[w], [self.coeff, self.w][w])])
+            optimizer.apply_gradients([(grads[w], self.trainable_variables[w])])
 
     def save_data(self, rewards):
         '''
@@ -190,13 +189,14 @@ class GTP_QRL():
         pauli_strings = get_k_local(k=self.locality, n_qubits=self.n_qubits)
 
         self.w = tf.Variable(
-            initial_value=tf.constant([1., -1.]), dtype="float32",
+            initial_value=tf.reshape(tf.constant([1., -1.]), [1,2]), dtype="float32",
             trainable=True, name="obs-weights")
         coeff_init = tf.random_uniform_initializer(minval=-1.0, maxval=1.0)
         self.coeff = tf.Variable(
             initial_value=coeff_init(shape=(1, len(self.omegas)*2+1), dtype="float32"),
             trainable=True, name="coefficients")
 
+        self.trainable_variables = [self.coeff, self.w]
         # normalizes the coefficients based on boundary conditions
         self.normalize_coeff(pauli_strings)
 
@@ -249,7 +249,7 @@ def main():
     locality = 3 # the k-locality of the observables
 
     n_episodes = 2000
-    learning_rates = [0.5, 0.5]
+    learning_rates = [0.1, 0.1]
     gamma = 1
     beta = 1.0
 

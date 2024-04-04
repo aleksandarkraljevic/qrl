@@ -138,12 +138,9 @@ class GTP_QRL():
     def normalize_coeff(self, pauli_strings):
         # normalizes the coefficients based on boundary conditions
         coeff_array = self.coeff.numpy()[0]
-        c_zero_norm = np.sqrt(coeff_array[0] ** 2)
-        a_w_b_w_norm = np.sqrt(coeff_array[1:len(self.omegas) + 1] ** 2 + coeff_array[len(self.omegas) + 1:] ** 2)
-        a_w_b_w_norm = np.concatenate(([c_zero_norm], a_w_b_w_norm, a_w_b_w_norm))
-        a_w_b_w_norm = tf.convert_to_tensor(a_w_b_w_norm, dtype=tf.float32)
-        #coeff_array = len(pauli_strings) * coeff_array # Screws with the action probabilities / makes it difficult to escape only choosing one action
-        coeff_array = coeff_array / a_w_b_w_norm
+        c_norm = np.sqrt(np.sum(coeff_array[1:len(self.omegas) + 1] ** 2 + coeff_array[len(self.omegas) + 1:] ** 2) + coeff_array[0] ** 2)
+        coeff_array = len(pauli_strings) * coeff_array
+        coeff_array = coeff_array / c_norm
         coeff_array = tf.reshape(coeff_array, [1, len(coeff_array)])
         self.coeff.assign(coeff_array)
 

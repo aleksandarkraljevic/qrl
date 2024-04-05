@@ -51,13 +51,13 @@ def main():
     '''
     This function evalutes what the user is interested in evaluating. Each of the following lines can be commented or uncommented depending on what the user exactly wants to evaluate
     '''
-    parameter_names = ['lr_coeff_0.5-lr_out_0.01', 'lr_coeff_0.1-lr_out_0.001', 'lr_coeff_0.01-lr_out_0.001', 'lr_coeff_0.001-lr_out_0.001']
-    label_names = ['c=0.5, w=0.01', 'c=0.1, w=0.001', 'c=0.01, w=0.001', 'c=0.001, w=0.001']
+    parameter_names = ['lr_in_0.5-lr_var_0.1-lr_out_0.001', 'lr_in_0.5-lr_var_0.01-lr_out_0.001', 'lr_in_0.5-lr_var_0.001-lr_out_0.1']
+    label_names = [r'$\theta=0.1, w=0.001$', r'$\theta=0.01, w=0.001$', r'$\theta=0.001, w=0.1$']
     parameter_name = 'lr_in_0.1-lr_var_0.001-lr_out_0.1'
 
     #plot(data_name='test', show=True, savename='test', smooth=False)
 
-    plot_comparison(parameter_names=parameter_names, repetitions=20, show=True, savename='final_lr', label_names=label_names)
+    plot_comparison(parameter_names=parameter_names, repetitions=20, show=True, savename='lr_in_0.5', label_names=label_names)
 
     #plot_experiment(parameter_name, 20, True, True)
 

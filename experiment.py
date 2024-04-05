@@ -7,7 +7,7 @@ flipped_model = True # whether to use the flipped model or the non-flipped model
 repetitions = 20
 # amount of episodes that will run
 n_episodes = 2000
-n_qubits = 4
+n_qubits = 8
 n_actions = 2
 locality = 3 # the k-locality of the observables
 
@@ -24,8 +24,8 @@ else:
     observables = [reduce((lambda x, y: x * y), ops)]  # Z_0*Z_1*Z_2*Z_3
 
 # Hyperparameters of the algorithm and other parameters of the program
-learning_rate_in = 0.1
-learning_rate_var = 0.01
+learning_rate_in = 0.01
+learning_rate_var = 0.001
 learning_rate_out = 0.01
 gamma = 1  # discount factor
 batch_size = 10
@@ -38,10 +38,11 @@ data_names = []
 
 start = time.time()
 
-argparser = ArgumentParser()
-argparser.add_argument("savename", default="test", nargs="?")
-args = argparser.parse_args()
-savename = args.savename
+#argparser = ArgumentParser()
+#argparser.add_argument("savename", default="test", nargs="?")
+#args = argparser.parse_args()
+#savename = args.savename
+savename = 'lr_in_' + str(learning_rate_in) + '-lr_var_' + str(learning_rate_var) + '-lr_out_' + str(learning_rate_out)
 
 for rep in range(repetitions):
     file_name = savename+'-repetition_' + str(rep + 1)

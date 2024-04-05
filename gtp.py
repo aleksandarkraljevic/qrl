@@ -135,14 +135,15 @@ class GTP_QRL():
 
         return tf.reduce_sum(all_elements, axis=1)
 
-    def normalize_coeff(self, pauli_strings):
-        # normalizes the coefficients based on boundary conditions
+    def normalize_coeff(self):
+        # normalizes the coefficients if they are too large to fall within the boundary conditions
         coeff_array = self.coeff.numpy()[0]
         c_norm = np.sqrt(np.sum(coeff_array[1:len(self.omegas) + 1] ** 2 + coeff_array[len(self.omegas) + 1:] ** 2) + coeff_array[0] ** 2)
-        coeff_array = len(pauli_strings) * coeff_array
-        coeff_array = coeff_array / c_norm
-        coeff_array = tf.reshape(coeff_array, [1, len(coeff_array)])
-        self.coeff.assign(coeff_array)
+        if c_norm > self.gtp_boundary:
+            coeff_array = self.gtp_boundary * coeff_array
+            coeff_array = coeff_array / c_norm
+            coeff_array = tf.reshape(coeff_array, [1, len(coeff_array)])
+            self.coeff.assign(coeff_array)
 
     @tf.function
     def reinforce_update(self, states, actions, returns):
@@ -184,6 +185,7 @@ class GTP_QRL():
         self.omegas = tf.cast(self.omegas, tf.float32)
 
         pauli_strings = get_k_local(k=self.locality, n_qubits=self.n_qubits)
+        self.gtp_boundary = len(pauli_strings)
 
         self.w = tf.Variable(
             initial_value=tf.reshape(tf.constant([1., -1.]), [1,2]), dtype="float32",
@@ -195,7 +197,7 @@ class GTP_QRL():
 
         self.trainable_variables = [self.coeff, self.w]
         # normalizes the coefficients based on boundary conditions
-        self.normalize_coeff(pauli_strings)
+        self.normalize_coeff()
 
         # Start training the agent
         episode_reward_history = []
@@ -217,7 +219,7 @@ class GTP_QRL():
             self.reinforce_update(states, id_action_pairs, returns)
 
             # normalizes the coefficients based on boundary conditions
-            self.normalize_coeff(pauli_strings)
+            self.normalize_coeff()
 
             # Store collected rewards
             for ep_rwds in rewards:

@@ -11,37 +11,36 @@ from functools import reduce
 tf.get_logger().setLevel('ERROR')
 
 class QRL():
-    def __init__(self, savename, model, n_qubits, n_layers, n_actions, env_name, n_episodes, batch_size, learning_rates, gamma, state_bounds, breakout):
+    def __init__(self, savename, model, n_qubits, n_layers, n_actions, env_name, n_episodes, batch_size, learning_rates, gamma, state_bounds):
         '''
-        Initializes the QRL parameters.
+        Initializes the QRL hyperparameters and run settings.
 
         Parameters
         ----------
         savename (str):
-            The name with which the file model and data files will be saved.
+            The name with which the model and data files will be saved.
         model (tensorflow keras model):
-            The base network.
+            The QRL model. This is either a flipped model or a data re-uploading model.
         n_qubits (int):
             The number of qubits that the PQC will use.
         n_layers (int):
-            The number of layers that the PQC will contain.
+            The number of layers (or depth) that the PQC will contain. The construction of one layer depends on whether the model is a flipped one or a data re-uploading one.
         n_actions (int):
             The number of actions that the agent can take in the environment.
         env_name (str):
             The name of the gym environment that is used to train the agent on.
         n_episodes (int):
-            The amount of total episodes that the model trains for.
+            The number of total episodes that the model trains for.
         batch_size (int):
-            The amount of samples that each training batch consists of.
+            The number of episodes that are used at each training step.
         learning_rates (list):
-            A list of three learning rates that the optimizers within the PQC use in order to update the encoding, variational, and rescaling weights.
+            A list of three learning rates that the optimizers within the PQC use in order to update the encoding, variational, and observable weights.
         gamma (float):
-            The discount factor that is used in the Q-learning algorithm.
+            The discount factor that is used in the learning algorithm.
         state_bounds (array):
             An array containing four float values that represent the bounds on the cartpole states.
-        breakout (boolean):
-            A boolean value that decides whether the agent should stop its training after it has "beaten" the game.
         '''
+
         self.savename = savename
         self.model = model
         self.gamma = gamma
@@ -52,15 +51,21 @@ class QRL():
         self.n_layers = n_layers
         self.n_actions = n_actions
         self.env_name = env_name
-        self.breakout = breakout
         self.optimizer_in = tf.keras.optimizers.Adam(learning_rate=learning_rates[0], amsgrad=True)
         self.optimizer_var = tf.keras.optimizers.Adam(learning_rate=learning_rates[1], amsgrad=True)
         self.optimizer_out = tf.keras.optimizers.Adam(learning_rate=learning_rates[2], amsgrad=True)
-        # Indexes of the weights for each of the parts of the circuit
+        # Indexes of the encoding, variational and observable weights
         self.w_in, self.w_var, self.w_out = 1, 0, 2
 
     def gather_episodes(self):
-        """Interact with environment in batched fashion."""
+        '''
+        This function Interacts with environment in batch-wise manner.
+
+        Returns
+        -------
+        trajectories (array):
+            Trajectories of the gathered batch of episodes.
+        '''
 
         trajectories = [defaultdict(list) for _ in range(self.batch_size)]
         envs = [gym.make(self.env_name) for _ in range(self.batch_size)]
@@ -72,7 +77,7 @@ class QRL():
             unfinished_ids = [i for i in range(self.batch_size) if not done[i]]
             normalized_states = [s / self.state_bounds for i, s in enumerate(states) if not done[i]]
 
-            if self.n_qubits > 4:
+            if self.n_qubits > 4: # Encode the input state variables more than once if there are more than 4 qubits
                 for qubit_ind in range(self.n_qubits-4):
                     for state_ind in range(len(normalized_states)):
                         normalized_states[state_ind] = np.append(normalized_states[state_ind], normalized_states[state_ind][qubit_ind%4])
@@ -95,7 +100,20 @@ class QRL():
         return trajectories
 
     def compute_returns(self, rewards_history):
-        """Compute discounted returns with discount factor `gamma`."""
+        '''
+        This function computes discounted returns with discount factor "gamma".
+
+        Parameters
+        ----------
+        reward_history (array):
+            Contains the rewards that were obtained in one episode.
+
+        Returns
+        -------
+        returns (list):
+            Discounted returns at each time step of the corresponding episode.
+        '''
+
         returns = []
         discounted_sum = 0
         for r in rewards_history[::-1]:
@@ -111,6 +129,19 @@ class QRL():
 
     @tf.function
     def reinforce_update(self, states, actions, returns):
+        '''
+        This function updates the weights of the PQC according to the REINFORCE learning algorithm.
+
+        Parameters
+        ----------
+        states (array):
+            The states of all time steps of the batch of episodes.
+        actions (array):
+            The actions of all time steps of the batch of episodes.
+        returns (array):
+            The discounted returns of all time steps of the batch of episodes.
+        '''
+
         states = tf.convert_to_tensor(states)
         actions = tf.convert_to_tensor(actions)
         returns = tf.convert_to_tensor(returns)
@@ -127,18 +158,22 @@ class QRL():
 
     def save_data(self, rewards):
         '''
-        Saves the model after its training, as well as important results and properties.
+        This function saves the model's weights and training performance after its training.
 
         Parameters
         ----------
         rewards (list):
-            A list of all the total rewards that were obtained at the end of each episode.
+            A list containing the total rewards that were obtained at all episodes.
         '''
         data = {'rewards': rewards, 'n_layers': self.n_layers}
         np.save('data/' + self.savename + '.npy', data)
-        #self.model.save_weights('models/' + self.savename) # saves the final model weights
+        self.model.save_weights('models/' + self.savename) # saves the final model weights
 
     def main(self):
+        '''
+        This function utilizes all the other functions from the QRL class to perform the process of training the model and saving the relevant data.
+        '''
+
         # Start training the agent
         episode_reward_history = []
         print('Training progress: ' + '0/' + str(self.n_episodes))
@@ -164,37 +199,32 @@ class QRL():
 
             print('Training progress: ' + str((batch+1)*self.batch_size) + '/' + str(self.n_episodes))
 
-            avg_rewards = np.mean(episode_reward_history[-10:])
-
-            if self.breakout:
-                if avg_rewards >= 500.0:
-                    break
-
         if self.savename != False:
             self.save_data(episode_reward_history)
 
 
 def main():
     '''
-    Initializes all the hyperparameters, creates the base and target network by calling upon dnn.py, and trains and saves the model by calling upon the QRL() class.
+    This function initializes all the hyperparameters, creates the quantum model by utilizing pqc.py, and trains and saves the model by calling upon the QRL() class.
     '''
-    env_name = "CartPole-v1"
-    flipped_model = True # whether to use the flipped model or the non-flipped model
 
-    n_qubits = 4  # Dimension of the state vectors in CartPole
-    n_actions = 2  # Number of actions in CartPole
-    locality = 3 # the k-locality of the observables
+    env_name = "CartPole-v1"
+    flipped_model = True # whether to use the flipped model or the data re-uploading model
+
+    n_qubits = 4  # Number of qubits that the PQC of the model will consist of
+    n_actions = 2  # Number of actions in the environment
+    locality = 3 # The locality of the observables
     qubits = cirq.GridQubit.rect(1, n_qubits)
 
     if flipped_model:
-        n_layers = 1  # Number of variational layers in the PQC
+        n_layers = 1  # Number of layers in the PQC
         pauli_strings = get_k_local(k=locality, n_qubits=n_qubits)
         linear_combination = [sum(pauli_strings)]
-        observables = linear_combination
+        observables = linear_combination # k-local observable: linear combination of all possible unique k-local Pauli strings, excluding Pauli-X operations
     else:
         n_layers = 5  # Number of layers in the PQC
         ops = [cirq.Z(q) for q in qubits]
-        observables = [reduce((lambda x, y: x * y), ops)]  # Z_0*Z_1*Z_2*Z_3
+        observables = [reduce((lambda x, y: x * y), ops)]  # Global observable: Z_0*Z_1*Z_2*Z_3
 
     n_episodes = 2000
     learning_rates = [0.1, 0.01, 0.01]
@@ -203,8 +233,6 @@ def main():
 
     state_bounds = np.array([2.4, 2.5, 0.21, 2.5])
     batch_size = 10
-
-    breakout = False
 
     savename = 'test'
 
@@ -219,7 +247,7 @@ def main():
 
     qrl = QRL(savename=savename, model=model, n_qubits=n_qubits, n_layers=n_layers, n_actions=n_actions,
               env_name=env_name, n_episodes=n_episodes, batch_size=batch_size, learning_rates=learning_rates,
-              gamma=gamma, state_bounds=state_bounds, breakout=breakout)
+              gamma=gamma, state_bounds=state_bounds)
 
     qrl.main()
 

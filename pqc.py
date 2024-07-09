@@ -10,8 +10,8 @@ class QuantumModel():
 
         Parameters
         ----------
-        qubits (int):
-            The number of qubits that the PQC will use.
+        qubits (GridQubit):
+            A 2d lattice of the qubits that the PQC will use.
         n_layers (int):
             The number of layers that the PQC will contain.
         observables (list):
@@ -25,6 +25,13 @@ class QuantumModel():
         """
         Returns Cirq gates that apply a rotation of the bloch sphere about the X,
         Y and Z axis, specified by the values in `symbols`.
+
+        Parameters
+        ----------
+        qubit (int):
+            The index of the qubit that the operation is applied on.
+        symbols (objects of the Symbols class):
+            The symbols represent where on the circuit this operation lies and what weight is associated to it.
         """
         return [cirq.rx(symbols[0])(qubit),
                 cirq.ry(symbols[1])(qubit),
@@ -34,6 +41,13 @@ class QuantumModel():
         """
         Returns Cirq gates that apply a rotation of the bloch sphere about the
         Y and Z axis, specified by the values in `symbols`.
+
+        Parameters
+        ----------
+        qubit (int):
+            The index of the qubit that the operation is applied on.
+        symbols (objects of the Symbols class):
+            The symbols represent where on the circuit this operation lies and what weight is associated to it.
         """
         return [cirq.ry(symbols[0])(qubit),
                 cirq.rz(symbols[1])(qubit)]
@@ -41,13 +55,30 @@ class QuantumModel():
     def entangling_layer(self):
         """
         Returns a layer of CZ entangling gates on `qubits` (arranged in a circular topology).
+
+        Returns
+        -------
+        cz_ops (list):
+            List containing for each qubit one cirq.CZ operation with the qubit in question acting as the control qubit, and the next qubit in line acting as the target qubit.
+            The final qubit has the first qubit acting as the target qubit. This only applies for n_qubits>2.
         """
         cz_ops = [cirq.CZ(q0, q1) for q0, q1 in zip(self.qubits, self.qubits[1:])]
         cz_ops += ([cirq.CZ(self.qubits[0], self.qubits[-1])] if len(self.qubits) != 2 else [])
         return cz_ops
 
     def generate_circuit(self):
-        """Prepares a data re-uploading circuit on `qubits` with `n_layers` layers."""
+        """
+        Prepares a data re-uploading circuit on `qubits` with `n_layers` layers.
+
+        Returns
+        -------
+        circuit (cirq.Circuit):
+            The PQC circuit architecture.
+        list(params.flat) (list):
+            List containing all variational parameters used in the PQC.
+        list(inputs.flat) (list):
+            List containing all input rescaling parameters used in the PQC.
+        """
         # Number of qubits
         n_qubits = len(self.qubits)
 
@@ -74,7 +105,18 @@ class QuantumModel():
         return circuit, list(params.flat), list(inputs.flat)
 
     def generate_flipped_circuit(self):
-        """Prepares a data re-uploading circuit on `qubits` with `n_layers` layers."""
+        """
+        Prepares a flipped circuit on `qubits` with `n_layers` layers.
+
+        Returns
+        -------
+        circuit (cirq.Circuit):
+            The PQC circuit architecture.
+        params_list (list):
+            List containing all variational parameters used in the PQC.
+        list(inputs.flat) (list):
+            List containing all input rescaling parameters used in the PQC.
+        """
         # Number of qubits
         n_qubits = len(self.qubits)
 
@@ -109,7 +151,14 @@ class QuantumModel():
         return circuit, params_list, list(inputs.flat)
 
     def generate_model_policy(self, n_actions, beta):
-        """Generates a Keras model for a data re-uploading PQC policy."""
+        """
+        Generates a Keras model for a data re-uploading PQC policy.
+
+        Returns
+        -------
+        model (keras model):
+            Data re-uploading keras model.
+        """
 
         input_tensor = tf.keras.Input(shape=(len(self.qubits),), dtype=tf.dtypes.float32, name='input')
         re_uploading_pqc = ReUploadingPQC(self.qubits, self.n_layers, self.observables)([input_tensor])
@@ -124,7 +173,14 @@ class QuantumModel():
         return model
 
     def generate_flipped_model_policy(self, n_actions, beta):
-        """Generates a Keras model for a data flipped PQC policy."""
+        """
+        Generates a Keras model for a flipped PQC policy.
+
+        Returns
+        -------
+        model (keras model):
+            Flipped keras model.
+        """
 
         input_tensor = tf.keras.Input(shape=(len(self.qubits),), dtype=tf.dtypes.float32, name='input')
         flipped_pqc = FlippedPQC(self.qubits, self.n_layers, self.observables)([input_tensor])
@@ -140,12 +196,28 @@ class QuantumModel():
 
 class Alternating(tf.keras.layers.Layer):
     def __init__(self, output_dim):
+        '''
+        This function initializes the observable weight multiplication.
+
+        Parameters
+        ----------
+        output_dim (int):
+            The dimension that the output of the PQC should be (or in other words, the number of actions that the environment needs).
+        '''
         super(Alternating, self).__init__()
         self.w = tf.Variable(
             initial_value=tf.constant([[(-1.)**i for i in range(output_dim)]]), dtype="float32",
             trainable=True, name="obs-weights")
 
     def call(self, inputs):
+        '''
+        This function performs the observable weight multiplication.
+
+        Parameters
+        ----------
+        inputs (tensor):
+            The output of the PQC.
+        '''
         return tf.matmul(inputs, self.w)
 
 class ReUploadingPQC(tf.keras.layers.Layer):
@@ -159,6 +231,24 @@ class ReUploadingPQC(tf.keras.layers.Layer):
     """
 
     def __init__(self, qubits, n_layers, observables, activation="linear", name="re-uploading_PQC"):
+        '''
+        This function initializes the data re-uploading PQC.
+
+        Parameters
+        ----------
+        qubits (GridQubit):
+            A 2d lattice of the qubits that the PQC will use.
+        n_layers (int):
+            The number of layers that the PQC will contain. Each layer contains 1 variational layer (consisting of XYZ rotations and 1 CZ entangling layer) and 1 encoding layer
+            (consisting of one X rotation). After n_lyaers there is one final variational layer.
+        observables (list):
+            The list of the observables that will be measured.
+        activataion (str):
+            The activation function that is applied onto the input scaling parameters.
+        name (str):
+            The name of the PQC.
+        '''
+
         super(ReUploadingPQC, self).__init__(name=name)
         self.n_layers = n_layers
         self.n_qubits = len(qubits)
@@ -186,6 +276,15 @@ class ReUploadingPQC(tf.keras.layers.Layer):
         self.computation_layer = tfq.layers.ControlledPQC(circuit, observables)
 
     def call(self, inputs):
+        '''
+        This function creates the data re-uploading PQC.
+
+        Parameters
+        ----------
+        inputs (list):
+            A list of which the first element is the encoding data of a state.
+        '''
+
         # inputs[0] = encoding data for the state.
         batch_dim = tf.gather(tf.shape(inputs[0]), 0)
         tiled_up_circuits = tf.repeat(self.empty_circuit, repeats=batch_dim)
@@ -209,6 +308,24 @@ class FlippedPQC(tf.keras.layers.Layer):
     """
 
     def __init__(self, qubits, n_layers, observables, activation="linear", name="flipped_PQC"):
+        '''
+        This function initializes the flipped PQC.
+
+        Parameters
+        ----------
+        qubits (GridQubit):
+            A 2d lattice of the qubits that the PQC will use.
+        n_layers (int):
+            The number of layers that the PQC will contain. Each layer contains 1 variational layer (consisting of XYZ rotations and 1 CZ entangling layer) and 1 encoding layer
+            (consisting of one X rotation). After n_lyaers there is one final variational layer.
+        observables (list):
+            The list of the observables that will be measured.
+        activataion (str):
+            The activation function that is applied onto the input scaling parameters.
+        name (str):
+            The name of the PQC.
+        '''
+
         super(FlippedPQC, self).__init__(name=name)
         self.n_layers = n_layers
         self.n_qubits = len(qubits)
@@ -236,6 +353,15 @@ class FlippedPQC(tf.keras.layers.Layer):
         self.computation_layer = tfq.layers.ControlledPQC(circuit, observables)
 
     def call(self, inputs):
+        '''
+        This function creates the flipped PQC.
+
+        Parameters
+        ----------
+        inputs (list):
+            A list of which the first element is the encoding data of a state.
+        '''
+
         # inputs[0] = encoding data for the state.
         batch_dim = tf.gather(tf.shape(inputs[0]), 0)
         tiled_up_circuits = tf.repeat(self.empty_circuit, repeats=batch_dim)

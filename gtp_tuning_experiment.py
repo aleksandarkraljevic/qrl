@@ -16,8 +16,8 @@ EXPERIMENTS = [
 
 
 argparser = ArgumentParser()
-#argparser.add_argument("savename", default="lr_in_", nargs="?")
-argparser.add_argument("--batch_n", type=int)
+#argparser.add_argument("savename", default="lr_in_", nargs="?") # in the case that a "savename" wants to be passed when calling on this python file
+argparser.add_argument("--batch_n", type=int) # in the case that a batch of experiments is run
 args = argparser.parse_args()
 #savename = args.savename
 savename = 'lr_coeff_'
@@ -56,7 +56,7 @@ for rep in range(repetitions):
 
     qrl = GTP_QRL(savename=file_name, locality=locality, n_qubits=n_qubits, n_actions=n_actions,
                   env_name=env_name, n_episodes=n_episodes, batch_size=batch_size, learning_rates=[learning_rate_coeff, learning_rate_out],
-                  gamma=gamma, beta=beta, state_bounds=state_bounds, breakout=breakout)
+                  gamma=gamma, beta=beta, state_bounds=state_bounds)
 
     qrl.main()
 

@@ -12,35 +12,36 @@ from collections import defaultdict
 tf.get_logger().setLevel('ERROR')
 
 class GTP_QRL():
-    def __init__(self, savename, locality, n_qubits, n_actions, env_name, n_episodes, batch_size, learning_rates, gamma, beta, state_bounds, breakout):
+    def __init__(self, savename, locality, n_qubits, n_actions, env_name, n_episodes, batch_size, learning_rates, gamma, beta, state_bounds):
         '''
-        Initializes the GTP_QRL parameters.
+        Initializes the GTP_QRL hyperparameters and run settings.
 
         Parameters
         ----------
         savename (str):
-            The name with which the file model and data files will be saved.
+            The name with which the model and data files will be saved.
+        model (tensorflow keras model):
+            The QRL model. This is either a flipped model or a data re-uploading model.
         n_qubits (int):
             The number of qubits that the PQC will use.
+        n_layers (int):
+            The number of layers (or depth) that the PQC will contain. The construction of one layer depends on whether the model is a flipped one or a data re-uploading one.
         n_actions (int):
             The number of actions that the agent can take in the environment.
         env_name (str):
             The name of the gym environment that is used to train the agent on.
         n_episodes (int):
-            The amount of total episodes that the model trains for.
+            The number of total episodes that the model trains for.
         batch_size (int):
-            The amount of samples that each training batch consists of.
+            The number of episodes that are used at each training step.
         learning_rates (list):
-            A list of three learning rates that the optimizers within the PQC use in order to update the encoding, variational, and rescaling weights.
+            A list of three learning rates that the optimizers within the PQC use in order to update the encoding, variational, and observable weights.
         gamma (float):
-            The discount factor that is used in the RL algorithm.
-        beta (float):
-            The inverse temperature that represents the amount of exploration within the algorithm.
+            The discount factor that is used in the learning algorithm.
         state_bounds (array):
             An array containing four float values that represent the bounds on the cartpole states.
-        breakout (boolean):
-            A boolean value that decides whether the agent should stop its training after it has "beaten" the game.
         '''
+
         self.savename = savename
         self.gamma = gamma
         self.beta = beta
@@ -50,15 +51,21 @@ class GTP_QRL():
         self.n_qubits = n_qubits
         self.n_actions = n_actions
         self.env_name = env_name
-        self.breakout = breakout
         self.locality = locality
         self.optimizer_coeff = tf.keras.optimizers.Adam(learning_rate=learning_rates[0], amsgrad=True)
         self.optimizer_w = tf.keras.optimizers.Adam(learning_rate=learning_rates[1], amsgrad=True)
-        # Indexes of the weights for each of the parts of the circuit
+        # Indexes of the coefficient and observable weights
         self.coeff_ind, self.w_ind = 0, 1
 
     def gather_episodes(self):
-        """Interact with environment in batched fashion."""
+        '''
+        This function Interacts with environment in batch-wise manner.
+
+        Returns
+        -------
+        trajectories (array):
+            Trajectories of the gathered batch of episodes.
+        '''
 
         trajectories = [defaultdict(list) for _ in range(self.batch_size)]
         envs = [gym.make(self.env_name) for _ in range(self.batch_size)]
@@ -69,11 +76,6 @@ class GTP_QRL():
         while not all(done):
             unfinished_ids = [i for i in range(self.batch_size) if not done[i]]
             normalized_states = [s / self.state_bounds for i, s in enumerate(states) if not done[i]]
-
-            if self.n_qubits > 4:
-                for qubit_ind in range(self.n_qubits-4):
-                    for state_ind in range(len(normalized_states)):
-                        normalized_states[state_ind] = np.append(normalized_states[state_ind], normalized_states[state_ind][qubit_ind%4])
 
             for i, state in zip(unfinished_ids, normalized_states):
                 trajectories[i]['states'].append(state)
@@ -97,7 +99,20 @@ class GTP_QRL():
         return trajectories
 
     def compute_returns(self, rewards_history):
-        """Compute discounted returns with discount factor `gamma`."""
+        '''
+        This function computes discounted returns with discount factor "gamma".
+
+        Parameters
+        ----------
+        reward_history (array):
+            Contains the rewards that were obtained in one episode.
+
+        Returns
+        -------
+        returns (list):
+            Discounted returns at each time step of the corresponding episode.
+        '''
+
         returns = []
         discounted_sum = 0
         for r in rewards_history[::-1]:
@@ -112,6 +127,19 @@ class GTP_QRL():
         return returns
 
     def softmax(self, actions_values):
+        '''
+        This function applies a softmax function to its input.
+
+        Parameters
+        ----------
+        actions_values (array):
+            An array containing a batch of actions.
+
+        Returns
+        -------
+        action_probs (array):
+            An array containing a batch of the probabilities of the actions.
+        '''
         maximums = tf.math.maximum(actions_values[:, 0], actions_values[:, 1])
         action_one = tf.reshape(actions_values[:, 0] - maximums, [len(maximums), 1])
         action_two = tf.reshape(actions_values[:, 1] - maximums, [len(maximums), 1])
@@ -122,6 +150,26 @@ class GTP_QRL():
         return action_probs
 
     def GTP(self, states, c_zero, a_w, b_w):
+        '''
+        This function acts as a generalized trigonometric polynomial function.
+
+        Parameters
+        ----------
+        states (array):
+            An array containing a batch of states.
+        c_zero (float):
+            The coefficient for the all-zero frequency.
+        a_w (list):
+            All the coefficients of the real part of the GTP.
+        b_w (list):
+            All the coefficients of the imaginary part of the GTP.
+
+        Returns
+        -------
+        tf.reduce_sum(all_elements, axis=1) (tensor):
+            A tensor containing the output of the GTP for a batch of states.
+        '''
+
         # states is the input, omegas are the frequency combinations, c_0, a_w and b_w are the trainable variables.
         # c_0 is the coefficient for the all 0 frequency, a_w is the real part of the c_w coefficient, b_w is the imaginary part of the c_w coefficient
         # this function only works correctly if each qubit only has 1 Pauli rotation as its encoding gate
@@ -136,7 +184,10 @@ class GTP_QRL():
         return tf.reduce_sum(all_elements, axis=1)
 
     def normalize_coeff(self):
-        # normalizes the coefficients if they are too large to fall within the boundary conditions
+        '''
+        This function normalizes the coefficients if they are too large to fall within the boundary conditions.
+        '''
+
         coeff_array = self.coeff.numpy()[0]
         c_norm = np.sqrt(np.sum(coeff_array[1:len(self.omegas) + 1] ** 2 + coeff_array[len(self.omegas) + 1:] ** 2) + coeff_array[0] ** 2)
         if c_norm > self.gtp_boundary:
@@ -147,6 +198,19 @@ class GTP_QRL():
 
     @tf.function
     def reinforce_update(self, states, actions, returns):
+        '''
+        This function updates the weights of the PQC according to the REINFORCE learning algorithm.
+
+        Parameters
+        ----------
+        states (array):
+            The states of all time steps of the batch of episodes.
+        actions (array):
+            The actions of all time steps of the batch of episodes.
+        returns (array):
+            The discounted returns of all time steps of the batch of episodes.
+        '''
+
         states = tf.convert_to_tensor(states)
         states = tf.cast(states, tf.float32)
         actions = tf.convert_to_tensor(actions)
@@ -166,19 +230,31 @@ class GTP_QRL():
 
     def save_data(self, rewards):
         '''
-        Saves the model after its training, as well as important results and properties.
+        This function saves the model's training performance after its training.
 
         Parameters
         ----------
         rewards (list):
-            A list of all the total rewards that were obtained at the end of each episode.
+            A list containing the total rewards that were obtained at all episodes.
         '''
+
         data = {'rewards': rewards}
         np.save('data/' + self.savename + '.npy', data)
 
     def main(self):
+        '''
+        This function utilizes all the other functions from the GTP_QRL class to perform the process of training the model and saving the relevant data.
+        '''
 
-        omegas = itertools.product([-1, 0, 1], repeat=self.n_qubits)
+        # compute the possible frequencies for 4 qubits and 8 qubits
+        if self.n_qubits == 4:
+            omegas = itertools.product([-1, 0, 1], repeat=4)
+        elif self.n_qubits == 8:
+            omegas = itertools.product([-2, -1, 0, 1, 2], repeat=4)
+        else:
+            print("The code for the GTP model only works for 4 or 8 qubits. Please select one of these two numbers of qubits when running.")
+            exit()
+
         omegas = list(omegas)
         self.omegas = omegas[:int(np.floor((len(omegas) / 2)))]  # get all the frequencies that are unique with regards to the combination, regardless of vector sign, and not counting the all zero
         self.omegas = tf.convert_to_tensor(self.omegas)
@@ -227,25 +303,20 @@ class GTP_QRL():
 
             print('Training progress: ' + str((batch+1)*self.batch_size) + '/' + str(self.n_episodes))
 
-            avg_rewards = np.mean(episode_reward_history[-10:])
-
-            if self.breakout:
-                if avg_rewards >= 500.0:
-                    break
-
         if self.savename != False:
             self.save_data(episode_reward_history)
 
 
 def main():
     '''
-    Initializes all the hyperparameters, creates the base and target network by calling upon dnn.py, and trains and saves the model by calling upon the GTP_QRL() class.
+    This function initializes all the hyperparameters, creates the quantum model by utilizing pqc.py, and trains and saves the model by calling upon the GTP_QRL() class.
     '''
+
     env_name = "CartPole-v1"
 
-    n_qubits = 4  # Dimension of the state vectors in CartPole
-    n_actions = 2  # Number of actions in CartPole
-    locality = 3 # the k-locality of the observables
+    n_qubits = 4  # Number of qubits. This code only works for 4 or 8 qubits.
+    n_actions = 2  # # Number of actions in the environment
+    locality = 3 # The locality of the observables
 
     n_episodes = 2000
     learning_rates = [0.1, 0.1]
@@ -255,15 +326,13 @@ def main():
     state_bounds = np.array([2.4, 2.5, 0.21, 2.5])
     batch_size = 10
 
-    breakout = False
-
     savename = 'test'
 
     start = time.time()
 
     qrl = GTP_QRL(savename=savename, locality=locality, n_qubits=n_qubits, n_actions=n_actions,
               env_name=env_name, n_episodes=n_episodes, batch_size=batch_size, learning_rates=learning_rates,
-              gamma=gamma, beta=beta, state_bounds=state_bounds, breakout=breakout)
+              gamma=gamma, beta=beta, state_bounds=state_bounds)
 
     qrl.main()
 

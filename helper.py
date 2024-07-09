@@ -20,10 +20,12 @@ def plot(data_name, show, savename, smooth):
     smooth (boolean):
         Whether savgol smoothing will be applied or not.
     '''
+
     data = np.load('data/'+data_name+'.npy', allow_pickle=True)
     rewards = data.item().get('rewards')
     if smooth==True:
         rewards = savgol_filter(rewards, 11, 1)
+
     episodes = np.arange(1, len(rewards) + 1)
     dataframe = np.vstack((rewards, episodes)).transpose()
     dataframe = pd.DataFrame(data=dataframe, columns=['Reward', 'Episode'])
@@ -38,7 +40,7 @@ def plot(data_name, show, savename, smooth):
 
 def plot_averaged(data_names, show, savename, smooth):
     '''
-    Plots an experiment's training average over all of its repetitions, including its standard errors.
+    Plots an experiment's training average over all of its repetitions, including its standard devation.
 
     Parameters
     ----------
@@ -51,6 +53,7 @@ def plot_averaged(data_names, show, savename, smooth):
     smooth (boolean):
         Whether savgol smoothing will be applied or not.
     '''
+
     n_names = len(data_names)
     data = np.load('data/'+data_names[0]+'.npy', allow_pickle=True)
     rewards = data.item().get('rewards')
@@ -65,6 +68,7 @@ def plot_averaged(data_names, show, savename, smooth):
     upper_bound = np.clip(mean_rewards+std_rewards,0, 500)
     if smooth == True:
         mean_rewards = savgol_filter(mean_rewards, 11, 1)
+
     dataframe = np.vstack((mean_rewards, episodes)).transpose()
     dataframe = pd.DataFrame(data=dataframe, columns=['Reward', 'Episode'])
 
@@ -97,6 +101,7 @@ def compare_models(parameter_names, repetitions, show, savename, label_names, sm
     smooth (boolean):
         Whether savgol smoothing will be applied or not.
     '''
+
     # this function requires the user to put all the experiment data in the data folder
     colors_list = ['blue', 'orange', 'green', 'red', 'purple', 'brown']
     plt.figure()
@@ -121,7 +126,7 @@ def compare_models(parameter_names, repetitions, show, savename, label_names, sm
 
         plot = sns.lineplot(data=dataframe, x='Episode', y='Reward', label=label_names[experiment])
         plt.fill_between(episodes, lower_bound, upper_bound, color=colors_list[experiment], alpha=0.1)
-        sns.move_legend(plot, "upper left")
+        sns.move_legend(plot, "lower right")
 
     plt.title('Mean reward per episode')
     if savename != False:
@@ -130,6 +135,21 @@ def compare_models(parameter_names, repetitions, show, savename, label_names, sm
         plt.show()
 
 def k_local_iterator(k, qubit_ind, possible_operations, qubits):
+    '''
+    This function acts as a k-local iterator.
+
+    Parameters
+    ----------
+    k (int):
+        The locality of the Pauli strings.
+    qubit_ind (int):
+        The index of a qubit.
+    possible_operations (list):
+        A list consisting of the allowed cirq operations.
+    qubits (GridQubit):
+        A 2d grid of qubits.
+    '''
+
     if k == 0:
         yield cirq.I(qubits[qubit_ind])
         return
@@ -144,6 +164,22 @@ def k_local_iterator(k, qubit_ind, possible_operations, qubits):
             yield next_op
 
 def get_k_local(k, n_qubits):
+    '''
+    This function uses the above k-local iterator function to obtain all possible unique k-local Pauli strings.
+
+    Parameters
+    ----------
+    k (int):
+        The locality of the Pauli strings.
+    n_qubits (int):
+        The number of qubits of the PQC.
+
+    Returns
+    -------
+    pauli_strings (list);
+        All possible unique k-local Pauli strings.
+    '''
+
     possible_operations = [cirq.Z, cirq.Y]
     qubits = cirq.GridQubit.rect(1, n_qubits)
     pauli_strings = []
@@ -151,15 +187,3 @@ def get_k_local(k, n_qubits):
         for combination in k_local_iterator(j, n_qubits - 1, possible_operations, qubits):
             pauli_strings.append(combination)
     return pauli_strings
-
-def compare_training_steps(parameter_names, repetitions, convergence_points):
-    for experiment in range(len(parameter_names)):
-        data = np.load('data/'+parameter_names[experiment]+'-repetition_1.npy', allow_pickle=True)
-        rewards = data.item().get('rewards')
-        for i in range(repetitions-1):
-            data = np.load('data/'+parameter_names[experiment]+'-repetition_'+str(i+2)+'.npy', allow_pickle=True)
-            new_rewards = data.item().get('rewards')
-            rewards = np.vstack((rewards, new_rewards))
-        mean_rewards = np.mean(rewards, axis=0)
-
-        print('Number of training steps until convergence for "'+str(parameter_names[experiment])+'":', round(np.sum(mean_rewards[:convergence_points[experiment]])))

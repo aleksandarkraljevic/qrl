@@ -2,43 +2,17 @@ from quantum_model import *
 from argparse import ArgumentParser
 
 EXPERIMENTS = [
-    #("lr_in", "lr_var", "lr_out"),
-    (0.5, 0.1, 0.1),
-    (0.5, 0.1, 0.01),
-    (0.5, 0.1, 0.001),
-    (0.5, 0.01, 0.1),
-    (0.5, 0.01, 0.01),
-    (0.5, 0.01, 0.001),
-    (0.5, 0.001, 0.1),
-    (0.5, 0.001, 0.01),
-    (0.5, 0.001, 0.001),
-    (0.1, 0.1, 0.1),
-    (0.1, 0.1, 0.01),
-    (0.1, 0.1, 0.001),
-    (0.1, 0.01, 0.1),
-    (0.1, 0.01, 0.01),
-    (0.1, 0.01, 0.001),
-    (0.1, 0.001, 0.1),
-    (0.1, 0.001, 0.01),
-    (0.1, 0.001, 0.001),
-    (0.01, 0.1, 0.1),
-    (0.01, 0.1, 0.01),
-    (0.01, 0.1, 0.001),
-    (0.01, 0.01, 0.1),
-    (0.01, 0.01, 0.01),
-    (0.01, 0.01, 0.001),
-    (0.01, 0.001, 0.1),
-    (0.01, 0.001, 0.01),
-    (0.01, 0.001, 0.001),
+    #("beta"),
+    (0.01),
+    (0.001)
 ]
 
-
 argparser = ArgumentParser()
-#argparser.add_argument("savename", default="lr_in_", nargs="?")
-argparser.add_argument("--batch_n", type=int)
+#argparser.add_argument("savename", default="lr_in_", nargs="?") # in the case that a "savename" wants to be passed when calling on this python file
+argparser.add_argument("--batch_n", type=int) # in the case that a batch of experiments is run
 args = argparser.parse_args()
 #savename = args.savename
-savename = 'lr_in_'
+savename = 'beta_'
 experiment = EXPERIMENTS[args.batch_n]
 
 env_name = "CartPole-v1"
@@ -49,7 +23,7 @@ repetitions = 20
 n_episodes = 2000
 n_qubits = 8
 n_actions = 2
-locality = 3 # the k-locality of the observables
+locality = 2 # the k-locality of the observables
 
 qubits = cirq.GridQubit.rect(1, n_qubits)
 
@@ -64,12 +38,12 @@ else:
     observables = [reduce((lambda x, y: x * y), ops)]  # Z_0*Z_1*Z_2*Z_3
 
 # Hyperparameters of the algorithm and other parameters of the program
-learning_rate_in = experiment[0]
-learning_rate_var = experiment[1]
-learning_rate_out = experiment[2]
+learning_rate_in = 0.1
+learning_rate_var = 0.01
+learning_rate_out = 0.1
 gamma = 1  # discount factor
 batch_size = 10
-beta = 1.0
+beta = experiment
 state_bounds = np.array([2.4, 2.5, 0.21, 2.5])
 
 breakout = False
@@ -79,7 +53,7 @@ data_names = []
 start = time.time()
 
 for rep in range(repetitions):
-    parameter_savename = str(learning_rate_in) + '-lr_var_' + str(learning_rate_var) + '-lr_out_' + str(learning_rate_out)
+    parameter_savename = str(beta)
     file_name = savename + parameter_savename + '-repetition_' + str(rep + 1)
 
     quantum_model = QuantumModel(qubits=qubits, n_layers=n_layers, observables=observables)
@@ -91,7 +65,7 @@ for rep in range(repetitions):
 
     qrl = QRL(savename=file_name, model=model, learning_rates=[learning_rate_in, learning_rate_var, learning_rate_out], gamma=gamma, n_episodes=n_episodes,
               batch_size=batch_size, state_bounds=state_bounds,
-              n_qubits=n_qubits, n_layers=n_layers, n_actions=n_actions, env_name=env_name, breakout=breakout)
+              n_qubits=n_qubits, n_layers=n_layers, n_actions=n_actions, env_name=env_name)
 
     qrl.main()
 
